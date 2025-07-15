@@ -4,6 +4,7 @@ from datetime import datetime
 import requests
 import json
 from PIL import Image
+from streamlit_qrcode_scanner import qrcode_scanner
 
 # Configure page
 st.set_page_config(
@@ -12,7 +13,7 @@ st.set_page_config(
     layout="centered"
 )
 
-# Google Sheets URL (replace with your actual URL)
+# Google Sheets URL
 GOOGLE_SHEETS_URL = 'https://script.google.com/macros/s/AKfycbyCVe8VytbR-UqcXEcshlfbbVf6cG3Y61PfP3hnpZPY1QvIDxIUALpB2_StHCf4MC3VZA/exec'
 
 # Initialize session state
@@ -20,6 +21,11 @@ if 'parts' not in st.session_state:
     st.session_state.parts = []
 if 'transfer_complete' not in st.session_state:
     st.session_state.transfer_complete = False
+
+@st.cache_data
+def get_empty_dataframe():
+    """Cached empty dataframe for performance"""
+    return pd.DataFrame(columns=['barcode', 'quantity'])
 
 def add_part(barcode):
     """Add or update part in the list"""
@@ -33,7 +39,7 @@ def add_part(barcode):
     for part in st.session_state.parts:
         if part['barcode'] == barcode:
             part['quantity'] += 1
-            st.success(f"Updated: {barcode} (qty: {part['quantity']})")
+            st.success(f"✅ {barcode} (qty: {part['quantity']})")
             return True
     
     # Add new part
@@ -42,30 +48,31 @@ def add_part(barcode):
         'quantity': 1,
         'timestamp': datetime.now()
     })
-    st.success(f"Added: {barcode}")
+    st.success(f"✅ Added: {barcode}")
     return True
 
 def remove_part(index):
     """Remove part from list"""
     if 0 <= index < len(st.session_state.parts):
         removed = st.session_state.parts.pop(index)
-        st.success(f"Removed: {removed['barcode']}")
+        st.success(f"🗑️ Removed: {removed['barcode']}")
 
 def update_quantity(index, new_qty):
     """Update part quantity"""
     if 0 <= index < len(st.session_state.parts) and new_qty > 0:
         st.session_state.parts[index]['quantity'] = new_qty
 
-def save_transfer(from_location, to_location, parts):
-    """Save transfer to Google Sheets"""
+@st.cache_data
+def save_transfer(from_location, to_location, parts_data):
+    """Save transfer to Google Sheets with caching"""
     try:
         transfer_data = {
             'timestamp': datetime.now().isoformat(),
             'fromLocation': from_location,
             'toLocation': to_location,
-            'parts': [{'barcode': p['barcode'], 'quantity': p['quantity']} for p in parts],
-            'totalParts': sum(p['quantity'] for p in parts),
-            'partTypes': len(parts)
+            'parts': parts_data,
+            'totalParts': sum(p['quantity'] for p in parts_data),
+            'partTypes': len(parts_data)
         }
         
         response = requests.post(
@@ -80,87 +87,111 @@ def save_transfer(from_location, to_location, parts):
         st.error(f"Save failed: {str(e)}")
         return False
 
+# CSS for faster loading and better UI
+st.markdown("""
+<style>
+    .main > div {
+        padding-top: 1rem;
+    }
+    .stButton > button {
+        width: 100%;
+        height: 3rem;
+        font-size: 1.2rem;
+        font-weight: bold;
+    }
+    .scan-success {
+        background-color: #d4edda;
+        border: 1px solid #c3e6cb;
+        color: #155724;
+        padding: 0.5rem;
+        border-radius: 0.25rem;
+        margin: 0.5rem 0;
+    }
+    .quantity-control {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # Main App
-st.title("📦 Parts Transfer Scanner")
+st.title("📦 Parts Transfer")
 
 # Transfer Details Section
-st.header("📍 Transfer Details")
-col1, col2 = st.columns(2)
-
-with col1:
-    from_location = st.text_input("From Location *", placeholder="e.g., Main Warehouse")
-
-with col2:
-    to_location = st.text_input("To Location *", placeholder="e.g., OTT19001")
-
-# Scanner Section
-st.header("🎯 Barcode Entry")
-
-# Photo upload for reference
-st.subheader("📷 Upload Photo (Optional)")
-uploaded_file = st.file_uploader(
-    "Take photo of barcode for reference",
-    type=['png', 'jpg', 'jpeg'],
-    help="Upload a photo to help verify the barcode"
-)
-
-if uploaded_file:
-    image = Image.open(uploaded_file)
-    col1, col2, col3 = st.columns([1, 2, 1])
+with st.container():
+    col1, col2 = st.columns(2)
+    with col1:
+        from_location = st.text_input("From Location", placeholder="Main Warehouse")
     with col2:
-        st.image(image, caption="Barcode Photo", use_column_width=True)
-    st.info("👆 Now type the barcode from this image below")
+        to_location = st.text_input("To Location", placeholder="OTT19001")
 
-# Manual Entry
-st.subheader("⌨️ Enter Barcode")
-manual_barcode = st.text_input("Type barcode here", placeholder="Scan or type barcode")
+# Real-time Scanner Section
+st.header("🎯 Live Barcode Scanner")
 
-if st.button("Add Part", type="primary", disabled=not manual_barcode):
-    if add_part(manual_barcode):
-        st.rerun()
+# Live QR/Barcode Scanner
+if st.checkbox("📱 Start Live Scanner", key="scanner_toggle"):
+    qr_code = qrcode_scanner(key='qrcode_scanner')
+    
+    if qr_code:
+        # Auto-add scanned barcode
+        if add_part(qr_code):
+            # Clear the scanner by rerunning
+            st.rerun()
+
+# Manual Entry (for backup)
+with st.expander("⌨️ Manual Entry", expanded=False):
+    manual_col1, manual_col2 = st.columns([3, 1])
+    with manual_col1:
+        manual_barcode = st.text_input("Enter barcode", key="manual_input")
+    with manual_col2:
+        if st.button("Add", key="add_manual"):
+            if manual_barcode and add_part(manual_barcode):
+                st.session_state.manual_input = ""  # Clear input
+                st.rerun()
 
 # Parts List Section
-st.header("📋 Scanned Parts")
+st.header("📋 Parts List")
 
 if st.session_state.parts:
-    # Display parts with edit capabilities
-    for i, part in enumerate(st.session_state.parts):
-        col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
-        
-        with col1:
-            st.write(f"**{part['barcode']}**")
-        
-        with col2:
-            new_qty = st.number_input(
-                "Qty", 
-                min_value=1, 
-                max_value=999, 
-                value=part['quantity'],
-                key=f"qty_{i}"
-            )
-            if new_qty != part['quantity']:
-                update_quantity(i, new_qty)
-        
-        with col3:
-            if st.button("➕", key=f"inc_{i}", help="Increase quantity"):
-                update_quantity(i, part['quantity'] + 1)
-                st.rerun()
-        
-        with col4:
-            if st.button("🗑️", key=f"del_{i}", help="Remove part"):
-                remove_part(i)
-                st.rerun()
-        
-        st.divider()
-    
-    # Summary
+    # Quick summary at top
     total_items = sum(p['quantity'] for p in st.session_state.parts)
-    part_types = len(st.session_state.parts)
+    st.info(f"📊 {total_items} items • {len(st.session_state.parts)} types")
     
-    st.info(f"📊 **Summary:** {total_items} total items • {part_types} different parts")
-    
+    # Compact parts display
+    for i, part in enumerate(st.session_state.parts):
+        with st.container():
+            col1, col2, col3 = st.columns([4, 2, 1])
+            
+            with col1:
+                st.write(f"**{part['barcode']}**")
+            
+            with col2:
+                # Quantity controls in one row
+                qty_col1, qty_col2, qty_col3 = st.columns([1, 2, 1])
+                with qty_col1:
+                    if st.button("➖", key=f"dec_{i}", help="Decrease"):
+                        if part['quantity'] > 1:
+                            update_quantity(i, part['quantity'] - 1)
+                            st.rerun()
+                
+                with qty_col2:
+                    st.write(f"**{part['quantity']}**", key=f"qty_display_{i}")
+                
+                with qty_col3:
+                    if st.button("➕", key=f"inc_{i}", help="Increase"):
+                        update_quantity(i, part['quantity'] + 1)
+                        st.rerun()
+            
+            with col3:
+                if st.button("🗑️", key=f"del_{i}", help="Remove"):
+                    remove_part(i)
+                    st.rerun()
+            
+            if i < len(st.session_state.parts) - 1:
+                st.divider()
 else:
-    st.info("No parts added yet")
+    st.info("No parts scanned yet")
 
 # Complete Transfer Section
 st.header("✅ Complete Transfer")
@@ -172,41 +203,35 @@ can_complete = (
     not st.session_state.transfer_complete
 )
 
-if st.button(
-    "Complete Transfer", 
-    type="primary", 
-    disabled=not can_complete,
-    use_container_width=True
-):
-    if save_transfer(from_location, to_location, st.session_state.parts):
-        st.success(f"✅ Transfer completed! {sum(p['quantity'] for p in st.session_state.parts)} items transferred")
-        st.session_state.transfer_complete = True
+if can_complete:
+    if st.button("🚀 Complete Transfer", type="primary"):
+        parts_data = [{'barcode': p['barcode'], 'quantity': p['quantity']} for p in st.session_state.parts]
         
-        # Auto-reset after success
-        st.balloons()
-        
-        if st.button("Start New Transfer", type="secondary", use_container_width=True):
-            st.session_state.parts = []
-            st.session_state.transfer_complete = False
-            st.rerun()
-
-# Validation messages
-if not can_complete and not st.session_state.transfer_complete:
+        if save_transfer(from_location, to_location, parts_data):
+            st.success(f"✅ Transfer completed! {sum(p['quantity'] for p in st.session_state.parts)} items")
+            st.balloons()
+            st.session_state.transfer_complete = True
+            
+            # Auto-reset
+            if st.button("🔄 New Transfer", type="secondary"):
+                st.session_state.parts = []
+                st.session_state.transfer_complete = False
+                st.rerun()
+else:
+    # Show what's missing
     missing = []
     if not from_location:
         missing.append("From Location")
     if not to_location:
         missing.append("To Location")
     if not st.session_state.parts:
-        missing.append("At least one part")
+        missing.append("Scan at least one part")
     
     if missing:
-        st.warning(f"Please provide: {', '.join(missing)}")
+        st.warning(f"Need: {', '.join(missing)}")
 
-# Reset button
-if st.session_state.parts:
-    st.divider()
-    if st.button("🔄 Reset All", help="Clear all data and start over"):
+# Quick reset button
+if st.session_state.parts and not st.session_state.transfer_complete:
+    if st.button("🔄 Clear All", help="Reset everything"):
         st.session_state.parts = []
-        st.session_state.transfer_complete = False
         st.rerun()
