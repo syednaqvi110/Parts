@@ -3,8 +3,7 @@ import pandas as pd
 from datetime import datetime
 import requests
 import json
-from PIL import Image
-from streamlit_qrcode_scanner import qrcode_scanner
+from streamlit_camera_input_live import camera_input_live
 
 # Configure page
 st.set_page_config(
@@ -21,6 +20,8 @@ if 'parts' not in st.session_state:
     st.session_state.parts = []
 if 'transfer_complete' not in st.session_state:
     st.session_state.transfer_complete = False
+if 'manual_input' not in st.session_state:
+    st.session_state.manual_input = ""
 
 @st.cache_data
 def get_empty_dataframe():
@@ -39,7 +40,7 @@ def add_part(barcode):
     for part in st.session_state.parts:
         if part['barcode'] == barcode:
             part['quantity'] += 1
-            st.success(f"✅ {barcode} (qty: {part['quantity']})")
+            st.success(f"✅ Updated: {barcode} (qty: {part['quantity']})")
             return True
     
     # Add new part
@@ -62,9 +63,8 @@ def update_quantity(index, new_qty):
     if 0 <= index < len(st.session_state.parts) and new_qty > 0:
         st.session_state.parts[index]['quantity'] = new_qty
 
-@st.cache_data
-def save_transfer(from_location, to_location, parts_data):
-    """Save transfer to Google Sheets with caching"""
+def save_transfer_data(from_location, to_location, parts_data):
+    """Save transfer to Google Sheets"""
     try:
         transfer_data = {
             'timestamp': datetime.now().isoformat(),
@@ -87,7 +87,11 @@ def save_transfer(from_location, to_location, parts_data):
         st.error(f"Save failed: {str(e)}")
         return False
 
-# CSS for faster loading and better UI
+def clear_manual_input():
+    """Clear the manual input field"""
+    st.session_state.manual_input = ""
+
+# CSS for better UI
 st.markdown("""
 <style>
     .main > div {
@@ -99,18 +103,11 @@ st.markdown("""
         font-size: 1.2rem;
         font-weight: bold;
     }
-    .scan-success {
-        background-color: #d4edda;
-        border: 1px solid #c3e6cb;
-        color: #155724;
-        padding: 0.5rem;
-        border-radius: 0.25rem;
-        margin: 0.5rem 0;
-    }
-    .quantity-control {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
+    .camera-container {
+        border: 3px solid #4CAF50;
+        border-radius: 10px;
+        padding: 10px;
+        margin: 10px 0;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -126,29 +123,54 @@ with st.container():
     with col2:
         to_location = st.text_input("To Location", placeholder="OTT19001")
 
-# Real-time Scanner Section
-st.header("🎯 Live Barcode Scanner")
+# Real-time Camera Scanner Section
+st.header("🎯 Live Camera Scanner")
 
-# Live QR/Barcode Scanner
-if st.checkbox("📱 Start Live Scanner", key="scanner_toggle"):
-    qr_code = qrcode_scanner(key='qrcode_scanner')
+# Camera scanning
+scanner_enabled = st.checkbox("📱 Enable Live Camera Scanner")
+
+if scanner_enabled:
+    st.info("📸 Camera is active - position barcode in view")
     
-    if qr_code:
-        # Auto-add scanned barcode
-        if add_part(qr_code):
-            # Clear the scanner by rerunning
+    # Live camera feed
+    camera_image = camera_input_live()
+    
+    if camera_image is not None:
+        # Display the live feed in a container
+        with st.container():
+            st.markdown('<div class="camera-container">', unsafe_allow_html=True)
+            st.image(camera_image, caption="Live Camera Feed", use_column_width=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+        
+        # Try to detect barcode (you'll need to add barcode detection here)
+        # For now, we'll use manual input as backup
+        st.info("Position barcode clearly in camera view, then use manual entry below")
+
+# Manual Entry Section (Enhanced)
+st.header("⌨️ Manual Entry")
+
+# Create a form for better enter key handling
+with st.form(key='barcode_form', clear_on_submit=True):
+    manual_barcode = st.text_input(
+        "Scan or type barcode here", 
+        value="",
+        placeholder="Type barcode and press Enter",
+        key="barcode_input"
+    )
+    
+    # Create two columns for the button
+    col1, col2 = st.columns([3, 1])
+    with col2:
+        submitted = st.form_submit_button("Add Part", type="primary")
+    
+    # Handle form submission (works with Enter key)
+    if submitted and manual_barcode:
+        if add_part(manual_barcode):
             st.rerun()
 
-# Manual Entry (for backup)
-with st.expander("⌨️ Manual Entry", expanded=False):
-    manual_col1, manual_col2 = st.columns([3, 1])
-    with manual_col1:
-        manual_barcode = st.text_input("Enter barcode", key="manual_input")
-    with manual_col2:
-        if st.button("Add", key="add_manual"):
-            if manual_barcode and add_part(manual_barcode):
-                st.session_state.manual_input = ""  # Clear input
-                st.rerun()
+# Alternative manual entry (if form doesn't work as expected)
+if not scanner_enabled:
+    st.info("💡 Enter barcode above and press Enter or click Add Part")
 
 # Parts List Section
 st.header("📋 Parts List")
@@ -158,7 +180,7 @@ if st.session_state.parts:
     total_items = sum(p['quantity'] for p in st.session_state.parts)
     st.info(f"📊 {total_items} items • {len(st.session_state.parts)} types")
     
-    # Compact parts display
+    # Parts display
     for i, part in enumerate(st.session_state.parts):
         with st.container():
             col1, col2, col3 = st.columns([4, 2, 1])
@@ -167,7 +189,7 @@ if st.session_state.parts:
                 st.write(f"**{part['barcode']}**")
             
             with col2:
-                # Quantity controls in one row
+                # Quantity controls
                 qty_col1, qty_col2, qty_col3 = st.columns([1, 2, 1])
                 with qty_col1:
                     if st.button("➖", key=f"dec_{i}", help="Decrease"):
@@ -176,7 +198,7 @@ if st.session_state.parts:
                             st.rerun()
                 
                 with qty_col2:
-                    st.write(f"**{part['quantity']}**", key=f"qty_display_{i}")
+                    st.write(f"**{part['quantity']}**")
                 
                 with qty_col3:
                     if st.button("➕", key=f"inc_{i}", help="Increase"):
@@ -207,12 +229,12 @@ if can_complete:
     if st.button("🚀 Complete Transfer", type="primary"):
         parts_data = [{'barcode': p['barcode'], 'quantity': p['quantity']} for p in st.session_state.parts]
         
-        if save_transfer(from_location, to_location, parts_data):
+        if save_transfer_data(from_location, to_location, parts_data):
             st.success(f"✅ Transfer completed! {sum(p['quantity'] for p in st.session_state.parts)} items")
             st.balloons()
             st.session_state.transfer_complete = True
             
-            # Auto-reset
+            # Auto-reset option
             if st.button("🔄 New Transfer", type="secondary"):
                 st.session_state.parts = []
                 st.session_state.transfer_complete = False
