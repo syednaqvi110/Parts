@@ -3,7 +3,6 @@ import pandas as pd
 from datetime import datetime
 import requests
 import json
-from pyzbar import pyzbar
 from PIL import Image
 import cv2
 import numpy as np
@@ -25,21 +24,9 @@ if 'transfer_complete' not in st.session_state:
     st.session_state.transfer_complete = False
 
 def decode_barcode(image):
-    """Extract barcode from image"""
-    try:
-        # Convert PIL to OpenCV format
-        opencv_image = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
-        gray = cv2.cvtColor(opencv_image, cv2.COLOR_BGR2GRAY)
-        
-        # Decode barcodes
-        barcodes = pyzbar.decode(gray)
-        
-        if barcodes:
-            return barcodes[0].data.decode('utf-8')
-        return None
-    except Exception as e:
-        st.error(f"Error reading barcode: {str(e)}")
-        return None
+    """Manual barcode entry - automatic detection disabled for deployment"""
+    st.info("📱 Take a photo to verify the barcode, then enter it manually below")
+    return None
 
 def add_part(barcode):
     """Add or update part in the list"""
