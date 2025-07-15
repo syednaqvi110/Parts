@@ -4,8 +4,6 @@ from datetime import datetime
 import requests
 import json
 from PIL import Image
-import cv2
-import numpy as np
 
 # Configure page
 st.set_page_config(
@@ -22,11 +20,6 @@ if 'parts' not in st.session_state:
     st.session_state.parts = []
 if 'transfer_complete' not in st.session_state:
     st.session_state.transfer_complete = False
-
-def decode_barcode(image):
-    """Manual barcode entry - automatic detection disabled for deployment"""
-    st.info("📱 Take a photo to verify the barcode, then enter it manually below")
-    return None
 
 def add_part(barcode):
     """Add or update part in the list"""
@@ -101,55 +94,35 @@ with col2:
     to_location = st.text_input("To Location *", placeholder="e.g., OTT19001")
 
 # Scanner Section
-st.header("🎯 Barcode Scanner")
+st.header("🎯 Barcode Entry")
 
-# Camera/Image upload
-scanner_option = st.radio(
-    "Choose scanning method:",
-    ["📷 Upload Image", "⌨️ Manual Entry"],
-    horizontal=True
+# Photo upload for reference
+st.subheader("📷 Upload Photo (Optional)")
+uploaded_file = st.file_uploader(
+    "Take photo of barcode for reference",
+    type=['png', 'jpg', 'jpeg'],
+    help="Upload a photo to help verify the barcode"
 )
 
-if scanner_option == "📷 Upload Image":
-    uploaded_file = st.file_uploader(
-        "Take photo or upload barcode image",
-        type=['png', 'jpg', 'jpeg'],
-        help="Take a photo of the barcode with your phone camera"
-    )
-    
-    if uploaded_file:
-        image = Image.open(uploaded_file)
-        
-        # Display image
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            st.image(image, caption="Uploaded Image", use_column_width=True)
-        
-        # Try to decode barcode
-        barcode = decode_barcode(image)
-        
-        if barcode:
-            st.success(f"📦 Barcode detected: {barcode}")
-            if st.button("Add This Part", type="primary", use_container_width=True):
-                add_part(barcode)
-                st.rerun()
-        else:
-            st.warning("No barcode detected in image. Try manual entry below.")
+if uploaded_file:
+    image = Image.open(uploaded_file)
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.image(image, caption="Barcode Photo", use_column_width=True)
+    st.info("👆 Now type the barcode from this image below")
 
-else:  # Manual Entry
-    manual_barcode = st.text_input("Enter barcode manually", placeholder="Type or paste barcode")
-    
-    if st.button("Add Part", type="primary", disabled=not manual_barcode):
-        if add_part(manual_barcode):
-            st.rerun()
+# Manual Entry
+st.subheader("⌨️ Enter Barcode")
+manual_barcode = st.text_input("Type barcode here", placeholder="Scan or type barcode")
+
+if st.button("Add Part", type="primary", disabled=not manual_barcode):
+    if add_part(manual_barcode):
+        st.rerun()
 
 # Parts List Section
 st.header("📋 Scanned Parts")
 
 if st.session_state.parts:
-    # Create DataFrame for better display
-    df_parts = pd.DataFrame(st.session_state.parts)
-    
     # Display parts with edit capabilities
     for i, part in enumerate(st.session_state.parts):
         col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
@@ -187,7 +160,7 @@ if st.session_state.parts:
     st.info(f"📊 **Summary:** {total_items} total items • {part_types} different parts")
     
 else:
-    st.info("No parts scanned yet")
+    st.info("No parts added yet")
 
 # Complete Transfer Section
 st.header("✅ Complete Transfer")
@@ -209,7 +182,7 @@ if st.button(
         st.success(f"✅ Transfer completed! {sum(p['quantity'] for p in st.session_state.parts)} items transferred")
         st.session_state.transfer_complete = True
         
-        # Auto-reset after a delay
+        # Auto-reset after success
         st.balloons()
         
         if st.button("Start New Transfer", type="secondary", use_container_width=True):
@@ -230,7 +203,7 @@ if not can_complete and not st.session_state.transfer_complete:
     if missing:
         st.warning(f"Please provide: {', '.join(missing)}")
 
-# Reset button (always available)
+# Reset button
 if st.session_state.parts:
     st.divider()
     if st.button("🔄 Reset All", help="Clear all data and start over"):
