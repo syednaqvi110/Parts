@@ -3,6 +3,7 @@ import pandas as pd
 from datetime import datetime
 import requests
 import json
+import time
 from streamlit_qrcode_scanner import qrcode_scanner
 
 # Configure page
@@ -20,22 +21,32 @@ if 'parts' not in st.session_state:
     st.session_state.parts = []
 if 'transfer_complete' not in st.session_state:
     st.session_state.transfer_complete = False
-if 'last_scanned' not in st.session_state:
-    st.session_state.last_scanned = ""
+if 'last_scanned_code' not in st.session_state:
+    st.session_state.last_scanned_code = ""
+if 'last_scan_time' not in st.session_state:
+    st.session_state.last_scan_time = 0
+if 'scanning_mode' not in st.session_state:
+    st.session_state.scanning_mode = None
+
+# Scan cooldown period (2 seconds)
+SCAN_COOLDOWN = 2.0
 
 def add_part(barcode):
     """Add or update part in the list"""
     if not barcode or len(barcode.strip()) < 2:
-        st.error("Invalid barcode")
+        st.error("Invalid QR code")
         return False
     
     barcode = barcode.strip().upper()
+    current_time = time.time()
     
-    # Prevent duplicate rapid scans
-    if barcode == st.session_state.last_scanned:
+    # Prevent duplicate rapid scans (2 second cooldown)
+    if (barcode == st.session_state.last_scanned_code and 
+        current_time - st.session_state.last_scan_time < SCAN_COOLDOWN):
         return False
     
-    st.session_state.last_scanned = barcode
+    st.session_state.last_scanned_code = barcode
+    st.session_state.last_scan_time = current_time
     
     # Check if part already exists
     for part in st.session_state.parts:
@@ -92,7 +103,9 @@ def reset_transfer():
     """Reset everything for new transfer"""
     st.session_state.parts = []
     st.session_state.transfer_complete = False
-    st.session_state.last_scanned = ""
+    st.session_state.last_scanned_code = ""
+    st.session_state.last_scan_time = 0
+    st.session_state.scanning_mode = None
 
 # CSS for better UI
 st.markdown("""
@@ -106,16 +119,22 @@ st.markdown("""
         font-size: 1.2rem;
         font-weight: bold;
     }
-    .scanner-container {
-        border: 3px solid #4CAF50;
-        border-radius: 10px;
-        padding: 15px;
+    .scanning-section {
+        border: 3px solid #2196F3;
+        border-radius: 15px;
+        padding: 20px;
         margin: 15px 0;
-        background-color: #f8fffe;
+        background-color: #f0f8ff;
     }
     .scanner-active {
         border-color: #ff4444;
         background-color: #fff8f8;
+    }
+    .mode-selector {
+        background-color: #f8f9fa;
+        padding: 15px;
+        border-radius: 10px;
+        margin: 10px 0;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -131,49 +150,88 @@ with st.container():
     with col2:
         to_location = st.text_input("To Location", placeholder="OTT19001")
 
-# Real-time Barcode Scanner Section
-st.header("🎯 Live Barcode Scanner")
+# Input Method Selection
+st.header("📱 Add Parts")
 
-# Scanner container with styling
 with st.container():
-    st.markdown('<div class="scanner-container">', unsafe_allow_html=True)
+    st.markdown('<div class="mode-selector">', unsafe_allow_html=True)
     
-    st.info("📱 **Live Scanner Active** - Point camera at barcode to scan automatically")
+    # Mode selection buttons
+    col1, col2 = st.columns(2)
     
-    # Real-time QR/Barcode Scanner
-    qr_code = qrcode_scanner(key='live_scanner')
+    with col1:
+        if st.button("📷 Scan QR Code", type="primary" if st.session_state.scanning_mode == "qr" else "secondary"):
+            st.session_state.scanning_mode = "qr"
+            st.rerun()
     
-    if qr_code:
-        # Auto-add scanned barcode
-        if add_part(qr_code):
-            # Clear the last scanned to allow rescanning same item
-            st.session_state.last_scanned = ""
+    with col2:
+        if st.button("⌨️ Manual Entry", type="primary" if st.session_state.scanning_mode == "manual" else "secondary"):
+            st.session_state.scanning_mode = "manual"
             st.rerun()
     
     st.markdown('</div>', unsafe_allow_html=True)
 
-# Manual Entry Section (Backup)
-st.header("⌨️ Manual Entry")
-
-# Form for Enter key support
-with st.form(key='barcode_form', clear_on_submit=True):
-    manual_barcode = st.text_input(
-        "Type barcode here", 
-        placeholder="Enter part number and press Enter",
-        help="Backup method if camera scanning doesn't work"
-    )
-    
-    submitted = st.form_submit_button("Add Part", type="secondary")
-    
-    if submitted and manual_barcode:
-        if add_part(manual_barcode):
+# QR Code Scanning Section
+if st.session_state.scanning_mode == "qr":
+    with st.container():
+        st.markdown('<div class="scanning-section scanner-active">', unsafe_allow_html=True)
+        
+        st.info("📱 **QR Scanner Active** - Point camera at QR code")
+        st.caption("⏱️ 2-second cooldown between scans to prevent duplicates")
+        
+        # QR Code Scanner (only when mode is selected)
+        qr_code = qrcode_scanner(key='qr_scanner_active')
+        
+        if qr_code:
+            if add_part(qr_code):
+                st.rerun()
+        
+        # Option to close scanner
+        if st.button("❌ Close Scanner", key="close_scanner"):
+            st.session_state.scanning_mode = None
             st.rerun()
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+
+# Manual Entry Section
+elif st.session_state.scanning_mode == "manual":
+    with st.container():
+        st.markdown('<div class="scanning-section">', unsafe_allow_html=True)
+        
+        st.info("⌨️ **Manual Entry Mode** - Type part numbers")
+        
+        # Form for Enter key support
+        with st.form(key='manual_form', clear_on_submit=True):
+            manual_code = st.text_input(
+                "Enter part number or QR code", 
+                placeholder="Type and press Enter",
+                help="Enter any part number or QR code value"
+            )
+            
+            col1, col2 = st.columns([3, 1])
+            with col2:
+                submitted = st.form_submit_button("Add Part", type="primary")
+            
+            if submitted and manual_code:
+                if add_part(manual_code):
+                    st.rerun()
+        
+        # Option to close manual entry
+        if st.button("❌ Close Manual Entry", key="close_manual"):
+            st.session_state.scanning_mode = None
+            st.rerun()
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+
+# Show mode selection hint
+if st.session_state.scanning_mode is None:
+    st.info("👆 **Choose a method above** to start adding parts")
 
 # Parts List Section
 st.header("📋 Parts List")
 
 if st.session_state.parts:
-    # Summary at top
+    # Summary
     total_items = sum(p['quantity'] for p in st.session_state.parts)
     st.info(f"📊 **{total_items} total items** • **{len(st.session_state.parts)} different parts**")
     
@@ -210,7 +268,7 @@ if st.session_state.parts:
             if i < len(st.session_state.parts) - 1:
                 st.divider()
 else:
-    st.info("No parts scanned yet - use the live scanner above")
+    st.info("No parts added yet - select a method above to start")
 
 # Complete Transfer Section
 st.header("✅ Complete Transfer")
@@ -230,7 +288,7 @@ if can_complete:
             st.success(f"✅ **Transfer Completed!** {sum(p['quantity'] for p in st.session_state.parts)} items transferred")
             st.balloons()
             
-            # Auto-reset for new transfer (no separate button needed)
+            # Auto-reset for new transfer
             reset_transfer()
             st.rerun()
 else:
@@ -241,13 +299,14 @@ else:
     if not to_location:
         missing.append("To Location")
     if not st.session_state.parts:
-        missing.append("Scan at least one part")
+        missing.append("Add at least one part")
     
     if missing:
         st.warning(f"⚠️ **Required:** {', '.join(missing)}")
 
-# Quick reset button (for emergencies)
+# Emergency reset button
 if st.session_state.parts:
-    if st.button("🔄 Clear All Parts", help="Emergency reset - clear all scanned parts"):
+    st.divider()
+    if st.button("🔄 Clear All Parts", help="Emergency reset - clear all parts"):
         reset_transfer()
         st.rerun()
