@@ -3,7 +3,6 @@ import pandas as pd
 from datetime import datetime
 import requests
 import json
-from streamlit_camera_input_live import camera_input_live
 
 # Configure page
 st.set_page_config(
@@ -124,27 +123,20 @@ with st.container():
         to_location = st.text_input("To Location", placeholder="OTT19001")
 
 # Real-time Camera Scanner Section
-st.header("🎯 Live Camera Scanner")
+st.header("🎯 Camera Scanner")
 
-# Camera scanning
-scanner_enabled = st.checkbox("📱 Enable Live Camera Scanner")
+# Use built-in camera input
+scanner_enabled = st.checkbox("📱 Enable Camera")
 
 if scanner_enabled:
-    st.info("📸 Camera is active - position barcode in view")
+    st.info("📸 Take photos of barcodes for reference")
     
-    # Live camera feed
-    camera_image = camera_input_live()
+    # Built-in Streamlit camera
+    camera_photo = st.camera_input("Take a photo of the barcode")
     
-    if camera_image is not None:
-        # Display the live feed in a container
-        with st.container():
-            st.markdown('<div class="camera-container">', unsafe_allow_html=True)
-            st.image(camera_image, caption="Live Camera Feed", use_column_width=True)
-            st.markdown('</div>', unsafe_allow_html=True)
-        
-        # Try to detect barcode (you'll need to add barcode detection here)
-        # For now, we'll use manual input as backup
-        st.info("Position barcode clearly in camera view, then use manual entry below")
+    if camera_photo is not None:
+        st.image(camera_photo, caption="Barcode Photo", use_column_width=True)
+        st.info("👆 Now type the barcode from this photo below")
 
 # Manual Entry Section (Enhanced)
 st.header("⌨️ Manual Entry")
