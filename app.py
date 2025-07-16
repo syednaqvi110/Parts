@@ -337,30 +337,52 @@ elif st.session_state.scanning_mode == "manual":
         
         st.info("⌨️ **Manual Entry Mode** - Type part numbers")
         
-        # Use a form for proper Enter key handling
-        with st.form(key='manual_form', clear_on_submit=True):
-            manual_code = st.text_input(
-                "Enter part number or QR code", 
-                placeholder="Type part number and press Enter",
-                help="Enter any part number or QR code value"
-            )
-            
-            # Add button
-            submitted = st.form_submit_button("➕ Add Part", type="primary", use_container_width=True)
-            
-            if submitted and manual_code and manual_code.strip():
-                if add_part(manual_code):
+        # Simple approach - use callback function for button
+        def process_manual_entry():
+            manual_input = st.session_state.get('manual_input_key', '')
+            if manual_input and manual_input.strip():
+                if add_part(manual_input):
                     # Show success message
                     for part in st.session_state.parts:
-                        if part['barcode'] == manual_code.strip().upper():
+                        if part['barcode'] == manual_input.strip().upper():
                             if part['quantity'] > 1:
                                 st.success(f"✅ Updated: {part['barcode']} (qty: {part['quantity']})")
                             else:
                                 st.success(f"✅ Added: {part['barcode']}")
                             break
-                    st.rerun()
-                elif manual_code.strip():
-                    st.warning("Please enter a valid part number")
+        
+        # Text input with key
+        st.text_input(
+            "Enter part number or QR code", 
+            placeholder="Type part number and press Enter",
+            help="Enter any part number or QR code value",
+            key='manual_input_key'
+        )
+        
+        # Add button with callback
+        if st.button("➕ Add Part", type="primary", use_container_width=True, key="manual_add_btn"):
+            process_manual_entry()
+            st.rerun()
+        
+        # JavaScript for Enter key handling
+        st.markdown("""
+        <script>
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                // Find the text input
+                const textInput = document.querySelector('input[data-testid="stTextInput"]');
+                if (textInput && textInput === document.activeElement) {
+                    e.preventDefault();
+                    // Find and click the Add Part button
+                    const addButton = document.querySelector('button[data-testid="baseButton-primary"]');
+                    if (addButton) {
+                        addButton.click();
+                    }
+                }
+            }
+        });
+        </script>
+        """, unsafe_allow_html=True)
         
         # Option to close manual entry
         if st.button("❌ Close Manual Entry", key="close_manual"):
