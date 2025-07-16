@@ -337,17 +337,18 @@ elif st.session_state.scanning_mode == "manual":
         
         st.info("⌨️ **Manual Entry Mode** - Type part numbers")
         
-        # Manual entry WITHOUT form (to avoid issues)
-        manual_code = st.text_input(
-            "Enter part number or QR code", 
-            placeholder="Type part number here",
-            help="Enter any part number or QR code value",
-            key="manual_input_direct"
-        )
-        
-        # Add button
-        if st.button("➕ Add Part", type="primary", use_container_width=True, key="manual_add_btn"):
-            if manual_code and manual_code.strip():
+        # Use a form for proper Enter key handling
+        with st.form(key='manual_form', clear_on_submit=True):
+            manual_code = st.text_input(
+                "Enter part number or QR code", 
+                placeholder="Type part number and press Enter",
+                help="Enter any part number or QR code value"
+            )
+            
+            # Add button
+            submitted = st.form_submit_button("➕ Add Part", type="primary", use_container_width=True)
+            
+            if submitted and manual_code and manual_code.strip():
                 if add_part(manual_code):
                     # Show success message
                     for part in st.session_state.parts:
@@ -357,29 +358,13 @@ elif st.session_state.scanning_mode == "manual":
                             else:
                                 st.success(f"✅ Added: {part['barcode']}")
                             break
-                    # Clear the input by resetting the key
-                    st.session_state.manual_input_direct = ""
                     st.rerun()
-            else:
-                st.warning("Please enter a part number")
-        
-        # Also handle Enter key with JavaScript
-        if manual_code and manual_code.strip():
-            st.markdown(f"""
-            <script>
-            document.addEventListener('keypress', function(e) {{
-                if (e.key === 'Enter') {{
-                    e.preventDefault();
-                    document.querySelector('[data-testid="manual_add_btn"] button').click();
-                }}
-            }});
-            </script>
-            """, unsafe_allow_html=True)
+                elif manual_code.strip():
+                    st.warning("Please enter a valid part number")
         
         # Option to close manual entry
         if st.button("❌ Close Manual Entry", key="close_manual"):
             st.session_state.scanning_mode = None
-            st.session_state.manual_input_direct = ""  # Clear input
             st.rerun()
         
         st.markdown('</div>', unsafe_allow_html=True)
