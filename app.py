@@ -38,8 +38,8 @@ FEEDBACK_DURATION = 2.0  # Exactly 2 seconds
 
 def add_part(barcode):
     """Add or update part in the list"""
-    if not barcode or len(barcode.strip()) < 2:
-        st.error("Invalid QR code")
+    barcode = barcode.strip().upper()
+    if not barcode:
         return False
     
     barcode = barcode.strip().upper()
@@ -334,59 +334,42 @@ if st.session_state.scanning_mode == "qr":
 elif st.session_state.scanning_mode == "manual":
     with st.container():
         st.markdown('<div class="scanning-section">', unsafe_allow_html=True)
-        
+
         st.info("⌨️ **Manual Entry Mode** - Type part numbers")
-        
+
         # Initialize session state for manual entry
         if 'manual_entry_value' not in st.session_state:
             st.session_state.manual_entry_value = ""
-        
-        # Simple text input without form
-        manual_code = st.text_input(
-            "Enter part number or QR code", 
+        if 'manual_text_input' not in st.session_state:
+            st.session_state.manual_text_input = ""
+
+        def manual_add_callback():
+            manual_code = st.session_state.manual_text_input.strip().upper()
+            if manual_code:
+                add_part(manual_code)
+                st.session_state.manual_entry_value = ""  # Clear input
+                st.session_state.manual_text_input = ""   # Reset visible field
+                st.rerun()
+
+        # Input field with on_change behavior
+        st.text_input(
+            "Enter part number or QR code",
             value=st.session_state.manual_entry_value,
             placeholder="Type part number here",
             help="Enter any part number or QR code value",
-            key="manual_text_input"
+            key="manual_text_input",
+            on_change=manual_add_callback
         )
-        
-        # Add button
-        if st.button("➕ Add Part", type="primary", use_container_width=True, key="manual_add_button"):
-            if manual_code and manual_code.strip():
-                if add_part(manual_code):
-                    # Show success message
-                    for part in st.session_state.parts:
-                        if part['barcode'] == manual_code.strip().upper():
-                            if part['quantity'] > 1:
-                                st.success(f"✅ Updated: {part['barcode']} (qty: {part['quantity']})")
-                            else:
-                                st.success(f"✅ Added: {part['barcode']}")
-                            break
-                    # Clear the input for next entry
-                    st.session_state.manual_entry_value = ""
-                    st.rerun()
-                else:
-                    st.warning("Please enter a valid part number")
-            else:
-                st.warning("Please enter a part number")
-        
-        # Handle Enter key with JavaScript
-        st.markdown(f"""
-        <script>
-        document.addEventListener('keydown', function(e) {{
-            if (e.key === 'Enter') {{
-                const textInput = document.querySelector('input[data-testid="stTextInput"]');
-                if (textInput && textInput === document.activeElement) {{
-                    e.preventDefault();
-                    const addButton = document.querySelector('button[data-testid="baseButton-primary"]');
-                    if (addButton && addButton.textContent.includes('Add Part')) {{
-                        addButton.click();
-                    }}
-                }}
-            }}
-        }});
-        </script>
-        """, unsafe_allow_html=True)
+
+        # Option to close manual entry
+        if st.button("❌ Close Manual Entry", key="close_manual"):
+            st.session_state.scanning_mode = None
+            st.session_state.manual_entry_value = ""
+            st.session_state.manual_text_input = ""
+            st.rerun()
+
+        st.markdown('</div>', unsafe_allow_html=True)
+
         
         # Option to close manual entry
         if st.button("❌ Close Manual Entry", key="close_manual"):
