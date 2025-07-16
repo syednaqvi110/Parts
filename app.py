@@ -49,10 +49,8 @@ def add_part(barcode):
     if st.session_state.scan_feedback_active:
         return False
     
-    # Prevent duplicate rapid scans
-    if (barcode == st.session_state.last_scanned_code and 
-        current_time - st.session_state.last_scan_time < SCAN_COOLDOWN):
-        return False
+    # Allow same code after feedback period expires (no cooldown for same code)
+    # Only prevent rapid duplicate scans within the feedback period
     
     st.session_state.last_scanned_code = barcode
     st.session_state.last_scan_time = current_time
@@ -323,10 +321,11 @@ if st.session_state.scanning_mode == "qr":
             time.sleep(0.5)
             st.rerun()
         
-        # Option to close scanner
+        # Option to close scanner (with safety check)
         if st.button("❌ Close Scanner", key="close_scanner"):
             st.session_state.scanning_mode = None
             st.session_state.scan_feedback_active = False
+            st.session_state.last_scanned_code = ""  # Clear to prevent accidental adds
             st.rerun()
         
         st.markdown('</div>', unsafe_allow_html=True)
@@ -338,35 +337,49 @@ elif st.session_state.scanning_mode == "manual":
         
         st.info("⌨️ **Manual Entry Mode** - Type part numbers")
         
-        # Mobile-optimized input
-        with st.form(key='manual_form', clear_on_submit=True):
-            manual_code = st.text_input(
-                "Enter part number or QR code", 
-                placeholder="Type and press Enter or tap Add",
-                help="Enter any part number or QR code value",
-                key="manual_input_field"
-            )
-            
-            # Make button more prominent for mobile
-            submitted = st.form_submit_button("➕ Add Part", type="primary", use_container_width=True)
-            
-            if submitted and manual_code:
+        # Manual entry WITHOUT form (to avoid issues)
+        manual_code = st.text_input(
+            "Enter part number or QR code", 
+            placeholder="Type part number here",
+            help="Enter any part number or QR code value",
+            key="manual_input_direct"
+        )
+        
+        # Add button
+        if st.button("➕ Add Part", type="primary", use_container_width=True, key="manual_add_btn"):
+            if manual_code and manual_code.strip():
                 if add_part(manual_code):
                     # Show success message
-                    part_found = False
                     for part in st.session_state.parts:
                         if part['barcode'] == manual_code.strip().upper():
-                            part_found = True
                             if part['quantity'] > 1:
                                 st.success(f"✅ Updated: {part['barcode']} (qty: {part['quantity']})")
                             else:
                                 st.success(f"✅ Added: {part['barcode']}")
                             break
+                    # Clear the input by resetting the key
+                    st.session_state.manual_input_direct = ""
                     st.rerun()
+            else:
+                st.warning("Please enter a part number")
+        
+        # Also handle Enter key with JavaScript
+        if manual_code and manual_code.strip():
+            st.markdown(f"""
+            <script>
+            document.addEventListener('keypress', function(e) {{
+                if (e.key === 'Enter') {{
+                    e.preventDefault();
+                    document.querySelector('[data-testid="manual_add_btn"] button').click();
+                }}
+            }});
+            </script>
+            """, unsafe_allow_html=True)
         
         # Option to close manual entry
         if st.button("❌ Close Manual Entry", key="close_manual"):
             st.session_state.scanning_mode = None
+            st.session_state.manual_input_direct = ""  # Clear input
             st.rerun()
         
         st.markdown('</div>', unsafe_allow_html=True)
