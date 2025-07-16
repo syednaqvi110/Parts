@@ -33,8 +33,8 @@ if 'scan_feedback_time' not in st.session_state:
     st.session_state.scan_feedback_time = 0
 
 # Scan cooldown and feedback duration
-SCAN_COOLDOWN = 3.0  # 3 seconds
-FEEDBACK_DURATION = 2.5  # 2.5 seconds
+SCAN_COOLDOWN = 2.0  # 2 seconds
+FEEDBACK_DURATION = 2.0  # Exactly 2 seconds
 
 def add_part(barcode):
     """Add or update part in the list"""
@@ -257,14 +257,14 @@ with st.container():
 # QR Code Scanning Section
 if st.session_state.scanning_mode == "qr":
     # Check if feedback period has expired
-    check_feedback_timeout()
+    feedback_expired = check_feedback_timeout()
     
     with st.container():
         st.markdown('<div class="scanning-section scanner-active">', unsafe_allow_html=True)
         
         if not st.session_state.scan_feedback_active:
             st.info("📱 **QR Scanner Active** - Point camera at QR code")
-            st.caption("⏱️ 3-second cooldown between scans")
+            st.caption("⏱️ 2-second pause after each scan")
             
             # QR Code Scanner (only when not in feedback mode)
             qr_code = qrcode_scanner(key='qr_scanner_active')
@@ -273,9 +273,16 @@ if st.session_state.scanning_mode == "qr":
                 if add_part(qr_code):
                     # Trigger vibration
                     st.markdown('<script>triggerVibration();</script>', unsafe_allow_html=True)
-                    st.rerun()
+                    # Don't rerun here - let the feedback show
         else:
             # Show scan feedback overlay
+            st.info("📱 **QR Scanner Active** - Point camera at QR code")
+            st.caption("⏱️ 2-second pause after each scan")
+            
+            # Still show the scanner component but it won't process new scans
+            qrcode_scanner(key='qr_scanner_active')
+            
+            # Show feedback overlay
             part_found = False
             for part in st.session_state.parts:
                 if part['barcode'] == st.session_state.last_scanned_code:
@@ -306,6 +313,15 @@ if st.session_state.scanning_mode == "qr":
                     <small>Added successfully</small>
                 </div>
                 ''', unsafe_allow_html=True)
+        
+        # If feedback just expired, rerun to refresh scanner
+        if feedback_expired:
+            st.rerun()
+        
+        # Auto-refresh every 0.5 seconds during feedback to check timeout
+        if st.session_state.scan_feedback_active:
+            time.sleep(0.5)
+            st.rerun()
         
         # Option to close scanner
         if st.button("❌ Close Scanner", key="close_scanner"):
