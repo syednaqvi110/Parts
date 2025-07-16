@@ -27,9 +27,14 @@ if 'last_scan_time' not in st.session_state:
     st.session_state.last_scan_time = 0
 if 'scanning_mode' not in st.session_state:
     st.session_state.scanning_mode = None
+if 'scan_feedback_active' not in st.session_state:
+    st.session_state.scan_feedback_active = False
+if 'scan_feedback_time' not in st.session_state:
+    st.session_state.scan_feedback_time = 0
 
-# Scan cooldown period (2 seconds)
-SCAN_COOLDOWN = 2.0
+# Scan cooldown and feedback duration
+SCAN_COOLDOWN = 3.0  # 3 seconds
+FEEDBACK_DURATION = 2.5  # 2.5 seconds
 
 def add_part(barcode):
     """Add or update part in the list"""
@@ -40,7 +45,11 @@ def add_part(barcode):
     barcode = barcode.strip().upper()
     current_time = time.time()
     
-    # Prevent duplicate rapid scans (2 second cooldown)
+    # Check if we're in feedback period
+    if st.session_state.scan_feedback_active:
+        return False
+    
+    # Prevent duplicate rapid scans
     if (barcode == st.session_state.last_scanned_code and 
         current_time - st.session_state.last_scan_time < SCAN_COOLDOWN):
         return False
@@ -48,11 +57,14 @@ def add_part(barcode):
     st.session_state.last_scanned_code = barcode
     st.session_state.last_scan_time = current_time
     
+    # Activate scan feedback
+    st.session_state.scan_feedback_active = True
+    st.session_state.scan_feedback_time = current_time
+    
     # Check if part already exists
     for part in st.session_state.parts:
         if part['barcode'] == barcode:
             part['quantity'] += 1
-            st.success(f"✅ Updated: {barcode} (qty: {part['quantity']})")
             return True
     
     # Add new part
@@ -61,8 +73,15 @@ def add_part(barcode):
         'quantity': 1,
         'timestamp': datetime.now()
     })
-    st.success(f"✅ Added: {barcode}")
     return True
+
+def check_feedback_timeout():
+    """Check if feedback period has expired"""
+    if st.session_state.scan_feedback_active:
+        current_time = time.time()
+        if current_time - st.session_state.scan_feedback_time > FEEDBACK_DURATION:
+            st.session_state.scan_feedback_active = False
+            st.rerun()
 
 def remove_part(index):
     """Remove part from list"""
@@ -106,8 +125,10 @@ def reset_transfer():
     st.session_state.last_scanned_code = ""
     st.session_state.last_scan_time = 0
     st.session_state.scanning_mode = None
+    st.session_state.scan_feedback_active = False
+    st.session_state.scan_feedback_time = 0
 
-# CSS for better UI
+# CSS for better UI and mobile compatibility
 st.markdown("""
 <style>
     .main > div {
@@ -118,6 +139,7 @@ st.markdown("""
         height: 3rem;
         font-size: 1.2rem;
         font-weight: bold;
+        -webkit-tap-highlight-color: transparent;
     }
     .scanning-section {
         border: 3px solid #2196F3;
@@ -125,10 +147,11 @@ st.markdown("""
         padding: 20px;
         margin: 15px 0;
         background-color: #f0f8ff;
+        position: relative;
     }
     .scanner-active {
-        border-color: #ff4444;
-        background-color: #fff8f8;
+        border-color: #4CAF50;
+        background-color: #f8fff8;
     }
     .mode-selector {
         background-color: #f8f9fa;
@@ -136,7 +159,66 @@ st.markdown("""
         border-radius: 10px;
         margin: 10px 0;
     }
+    .scan-feedback {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: rgba(76, 175, 80, 0.95);
+        color: white;
+        padding: 20px;
+        border-radius: 15px;
+        font-size: 1.5rem;
+        font-weight: bold;
+        text-align: center;
+        z-index: 1000;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        animation: scanSuccess 0.5s ease-out;
+    }
+    @keyframes scanSuccess {
+        0% { transform: translate(-50%, -50%) scale(0.8); opacity: 0; }
+        100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+    }
+    .scan-feedback.success {
+        background: rgba(76, 175, 80, 0.95);
+    }
+    .scan-feedback.update {
+        background: rgba(33, 150, 243, 0.95);
+    }
+    /* Mobile-specific improvements */
+    @media (max-width: 768px) {
+        .stTextInput > div > div > input {
+            font-size: 16px !important;
+            -webkit-appearance: none;
+            appearance: none;
+            background-color: white;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            padding: 12px;
+        }
+        .stTextInput > div > div > input:focus {
+            border-color: #2196F3;
+            outline: none;
+        }
+        .stButton > button {
+            -webkit-tap-highlight-color: rgba(0,0,0,0);
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+    }
 </style>
+""", unsafe_allow_html=True)
+
+# Vibration JavaScript for mobile
+st.markdown("""
+<script>
+function triggerVibration() {
+    if (navigator.vibrate) {
+        navigator.vibrate([200, 100, 200]);
+    }
+}
+</script>
 """, unsafe_allow_html=True)
 
 # Main App
@@ -162,6 +244,7 @@ with st.container():
     with col1:
         if st.button("📷 Scan QR Code", type="primary" if st.session_state.scanning_mode == "qr" else "secondary"):
             st.session_state.scanning_mode = "qr"
+            st.session_state.scan_feedback_active = False
             st.rerun()
     
     with col2:
@@ -173,22 +256,61 @@ with st.container():
 
 # QR Code Scanning Section
 if st.session_state.scanning_mode == "qr":
+    # Check if feedback period has expired
+    check_feedback_timeout()
+    
     with st.container():
         st.markdown('<div class="scanning-section scanner-active">', unsafe_allow_html=True)
         
-        st.info("📱 **QR Scanner Active** - Point camera at QR code")
-        st.caption("⏱️ 2-second cooldown between scans to prevent duplicates")
-        
-        # QR Code Scanner (only when mode is selected)
-        qr_code = qrcode_scanner(key='qr_scanner_active')
-        
-        if qr_code:
-            if add_part(qr_code):
-                st.rerun()
+        if not st.session_state.scan_feedback_active:
+            st.info("📱 **QR Scanner Active** - Point camera at QR code")
+            st.caption("⏱️ 3-second cooldown between scans")
+            
+            # QR Code Scanner (only when not in feedback mode)
+            qr_code = qrcode_scanner(key='qr_scanner_active')
+            
+            if qr_code:
+                if add_part(qr_code):
+                    # Trigger vibration
+                    st.markdown('<script>triggerVibration();</script>', unsafe_allow_html=True)
+                    st.rerun()
+        else:
+            # Show scan feedback overlay
+            part_found = False
+            for part in st.session_state.parts:
+                if part['barcode'] == st.session_state.last_scanned_code:
+                    part_found = True
+                    if part['quantity'] > 1:
+                        st.markdown(f'''
+                        <div class="scan-feedback update">
+                            ✅ ITEM SCANNED<br>
+                            <small>{part['barcode']}</small><br>
+                            <small>Quantity: {part['quantity']}</small>
+                        </div>
+                        ''', unsafe_allow_html=True)
+                    else:
+                        st.markdown(f'''
+                        <div class="scan-feedback success">
+                            ✅ ITEM SCANNED<br>
+                            <small>{part['barcode']}</small><br>
+                            <small>Added successfully</small>
+                        </div>
+                        ''', unsafe_allow_html=True)
+                    break
+            
+            if not part_found:
+                st.markdown(f'''
+                <div class="scan-feedback success">
+                    ✅ ITEM SCANNED<br>
+                    <small>{st.session_state.last_scanned_code}</small><br>
+                    <small>Added successfully</small>
+                </div>
+                ''', unsafe_allow_html=True)
         
         # Option to close scanner
         if st.button("❌ Close Scanner", key="close_scanner"):
             st.session_state.scanning_mode = None
+            st.session_state.scan_feedback_active = False
             st.rerun()
         
         st.markdown('</div>', unsafe_allow_html=True)
@@ -200,20 +322,30 @@ elif st.session_state.scanning_mode == "manual":
         
         st.info("⌨️ **Manual Entry Mode** - Type part numbers")
         
-        # Form for Enter key support
+        # Mobile-optimized input
         with st.form(key='manual_form', clear_on_submit=True):
             manual_code = st.text_input(
                 "Enter part number or QR code", 
-                placeholder="Type and press Enter",
-                help="Enter any part number or QR code value"
+                placeholder="Type and press Enter or tap Add",
+                help="Enter any part number or QR code value",
+                key="manual_input_field"
             )
             
-            col1, col2 = st.columns([3, 1])
-            with col2:
-                submitted = st.form_submit_button("Add Part", type="primary")
+            # Make button more prominent for mobile
+            submitted = st.form_submit_button("➕ Add Part", type="primary", use_container_width=True)
             
             if submitted and manual_code:
                 if add_part(manual_code):
+                    # Show success message
+                    part_found = False
+                    for part in st.session_state.parts:
+                        if part['barcode'] == manual_code.strip().upper():
+                            part_found = True
+                            if part['quantity'] > 1:
+                                st.success(f"✅ Updated: {part['barcode']} (qty: {part['quantity']})")
+                            else:
+                                st.success(f"✅ Added: {part['barcode']}")
+                            break
                     st.rerun()
         
         # Option to close manual entry
@@ -281,7 +413,7 @@ can_complete = (
 )
 
 if can_complete:
-    if st.button("🚀 Complete Transfer", type="primary"):
+    if st.button("🚀 Complete Transfer", type="primary", use_container_width=True):
         parts_data = [{'barcode': p['barcode'], 'quantity': p['quantity']} for p in st.session_state.parts]
         
         if save_transfer_data(from_location, to_location, parts_data):
@@ -307,6 +439,6 @@ else:
 # Emergency reset button
 if st.session_state.parts:
     st.divider()
-    if st.button("🔄 Clear All Parts", help="Emergency reset - clear all parts"):
+    if st.button("🔄 Clear All Parts", help="Emergency reset - clear all parts", use_container_width=True):
         reset_transfer()
         st.rerun()
