@@ -337,18 +337,22 @@ elif st.session_state.scanning_mode == "manual":
         
         st.info("⌨️ **Manual Entry Mode** - Type part numbers")
         
-        # Back to the working form approach
-        with st.form(key='manual_form', clear_on_submit=True):
-            manual_code = st.text_input(
-                "Enter part number or QR code", 
-                placeholder="Type part number and press Enter",
-                help="Enter any part number or QR code value"
-            )
-            
-            # Add button
-            submitted = st.form_submit_button("➕ Add Part", type="primary", use_container_width=True)
-            
-            if submitted and manual_code and manual_code.strip():
+        # Initialize session state for manual entry
+        if 'manual_entry_value' not in st.session_state:
+            st.session_state.manual_entry_value = ""
+        
+        # Simple text input without form
+        manual_code = st.text_input(
+            "Enter part number or QR code", 
+            value=st.session_state.manual_entry_value,
+            placeholder="Type part number here",
+            help="Enter any part number or QR code value",
+            key="manual_text_input"
+        )
+        
+        # Add button
+        if st.button("➕ Add Part", type="primary", use_container_width=True, key="manual_add_button"):
+            if manual_code and manual_code.strip():
                 if add_part(manual_code):
                     # Show success message
                     for part in st.session_state.parts:
@@ -358,11 +362,36 @@ elif st.session_state.scanning_mode == "manual":
                             else:
                                 st.success(f"✅ Added: {part['barcode']}")
                             break
+                    # Clear the input for next entry
+                    st.session_state.manual_entry_value = ""
                     st.rerun()
+                else:
+                    st.warning("Please enter a valid part number")
+            else:
+                st.warning("Please enter a part number")
+        
+        # Handle Enter key with JavaScript
+        st.markdown(f"""
+        <script>
+        document.addEventListener('keydown', function(e) {{
+            if (e.key === 'Enter') {{
+                const textInput = document.querySelector('input[data-testid="stTextInput"]');
+                if (textInput && textInput === document.activeElement) {{
+                    e.preventDefault();
+                    const addButton = document.querySelector('button[data-testid="baseButton-primary"]');
+                    if (addButton && addButton.textContent.includes('Add Part')) {{
+                        addButton.click();
+                    }}
+                }}
+            }}
+        }});
+        </script>
+        """, unsafe_allow_html=True)
         
         # Option to close manual entry
         if st.button("❌ Close Manual Entry", key="close_manual"):
             st.session_state.scanning_mode = None
+            st.session_state.manual_entry_value = ""
             st.rerun()
         
         st.markdown('</div>', unsafe_allow_html=True)
