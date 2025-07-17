@@ -170,7 +170,7 @@ st.title("📦 Parts Transfer")
 with st.container():
     col1, col2 = st.columns(2)
     with col1:
-        from_location = st.text_input("From Location", placeholder="Main Warehouse")
+        from_location = st.text_input("From Location", placeholder="")
     with col2:
         to_location = st.text_input("To Location", placeholder="")
 
