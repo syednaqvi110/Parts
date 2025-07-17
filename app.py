@@ -208,7 +208,11 @@ if st.session_state.scanning_mode == "qr_scanner":
         
         # Option to close scanner
         if st.button("❌ Close Scanner", key="close_scanner"):
+            # Clear any pending scanner state to prevent duplicate processing
             st.session_state.scanning_mode = None
+            # Force a clean state by clearing the scanner key
+            if 'qrcode_scanner' in st.session_state:
+                del st.session_state['qrcode_scanner']
             st.rerun()
         
         st.markdown('</div>', unsafe_allow_html=True)
