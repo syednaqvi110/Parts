@@ -198,123 +198,132 @@ if st.session_state.scanning_mode == "qr_scanner":
         
         st.info("📱 **QR Scanner Active** - Point camera at QR codes")
         
-        # QR Scanner component
-        try:
-            from streamlit_qrcode_scanner import qrcode_scanner
-            
-            # Create QR scanner
-            qr_code = qrcode_scanner(
-                key="qr_scanner",
-                height=400,
-                width=400,
-                title="QR Code Scanner",
-                subtitle="Position QR code within the frame"
-            )
-            
-            # Process scanned code
-            if qr_code:
-                if add_part(qr_code, from_scanner=True):
-                    # Trigger haptic feedback if available
-                    st.markdown("""
-                    <script>
-                    if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
-                    </script>
-                    """, unsafe_allow_html=True)
-                    
-                    # Brief success message
-                    time.sleep(0.5)
-                    st.rerun()
+        # HTML5 QR Scanner - Direct implementation
+        st.markdown("""
+        <div class="qr-scanner-container">
+            <div id="qr-reader" style="width: 100%; max-width: 500px; margin: 0 auto;"></div>
+            <p style="margin-top: 10px; color: #666;">
+                📱 Allow camera access to scan QR codes
+            </p>
+        </div>
         
-        except ImportError:
-            # Fallback: HTML5 QR Scanner
-            st.markdown("""
-            <div class="qr-scanner-container">
-                <div id="qr-reader" style="width: 100%; max-width: 500px; margin: 0 auto;"></div>
-                <p style="margin-top: 10px; color: #666;">
-                    📱 Allow camera access to scan QR codes
-                </p>
-            </div>
+        <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+        <script>
+            let html5QrCode;
+            let isScanning = false;
             
-            <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-            <script>
-                function startScanner() {
-                    const html5QrCode = new Html5Qrcode("qr-reader");
+            function startScanner() {
+                if (isScanning) return;
+                
+                html5QrCode = new Html5Qrcode("qr-reader");
+                
+                const qrCodeSuccessCallback = (decodedText, decodedResult) => {
+                    // Add scanned code to hidden input
+                    const hiddenInput = document.getElementById('scanned_code_input');
+                    if (hiddenInput) {
+                        hiddenInput.value = decodedText;
+                        hiddenInput.dispatchEvent(new Event('input', { bubbles: true }));
+                    }
                     
-                    const qrCodeSuccessCallback = (decodedText, decodedResult) => {
-                        // Send scanned code to Streamlit
-                        window.parent.postMessage({
-                            type: 'qr_scanned',
-                            data: decodedText
-                        }, '*');
-                    };
+                    // Trigger vibration if available
+                    if (navigator.vibrate) {
+                        navigator.vibrate([200, 100, 200]);
+                    }
                     
-                    const config = { 
-                        fps: 10, 
-                        qrbox: { width: 250, height: 250 },
-                        aspectRatio: 1.0
-                    };
-                    
-                    html5QrCode.start(
-                        { facingMode: "environment" }, 
-                        config, 
-                        qrCodeSuccessCallback
-                    ).catch(err => {
-                        console.error("QR Scanner error:", err);
-                        document.getElementById("qr-reader").innerHTML = 
-                            "<p>❌ Camera access denied or not available</p>";
+                    console.log('QR Code scanned:', decodedText);
+                };
+                
+                const config = { 
+                    fps: 10, 
+                    qrbox: { width: 250, height: 250 },
+                    aspectRatio: 1.0
+                };
+                
+                html5QrCode.start(
+                    { facingMode: "environment" }, 
+                    config, 
+                    qrCodeSuccessCallback
+                ).then(() => {
+                    isScanning = true;
+                    console.log("QR Scanner started successfully");
+                }).catch(err => {
+                    console.error("QR Scanner error:", err);
+                    document.getElementById("qr-reader").innerHTML = 
+                        "<p style='color: red;'>❌ Camera access denied or not available<br>Please allow camera access and refresh</p>";
+                });
+            }
+            
+            function stopScanner() {
+                if (html5QrCode && isScanning) {
+                    html5QrCode.stop().then(() => {
+                        isScanning = false;
+                        console.log("QR Scanner stopped");
+                    }).catch(err => {
+                        console.error("Error stopping scanner:", err);
                     });
                 }
-                
-                // Start scanner when page loads
-                setTimeout(startScanner, 1000);
-            </script>
-            """, unsafe_allow_html=True)
+            }
             
-            # Listen for scanned codes
-            st.markdown("""
-            <script>
-                window.addEventListener('message', function(event) {
-                    if (event.data.type === 'qr_scanned') {
-                        // Add the scanned code to session state
-                        const scannedCode = event.data.data;
-                        console.log('QR Code scanned:', scannedCode);
-                        
-                        // Trigger Streamlit rerun with the scanned code
-                        const inputs = document.querySelectorAll('input[type="text"]');
-                        for (let input of inputs) {
-                            if (input.placeholder && input.placeholder.includes('scan result')) {
-                                input.value = scannedCode;
-                                input.dispatchEvent(new Event('input', { bubbles: true }));
-                                break;
-                            }
-                        }
-                    }
-                });
-            </script>
-            """, unsafe_allow_html=True)
+            // Start scanner when page loads
+            setTimeout(startScanner, 1000);
             
-            # Hidden input to capture scanned results
-            scanned_code = st.text_input(
-                "Scanned code will appear here",
-                placeholder="Waiting for scan result...",
-                key="scanned_result",
-                label_visibility="hidden"
-            )
+            // Stop scanner when page unloads
+            window.addEventListener('beforeunload', stopScanner);
+        </script>
+        """, unsafe_allow_html=True)
+        
+        # Hidden input to capture scanned results
+        scanned_code = st.text_input(
+            "Scanned code will appear here",
+            placeholder="Waiting for scan result...",
+            key="scanned_result",
+            label_visibility="hidden"
+        )
+        
+        # Add JavaScript to connect scanner to input
+        st.markdown("""
+        <script>
+            // Connect the scanner output to the Streamlit input
+            const observer = new MutationObserver(function(mutations) {
+                const input = document.querySelector('input[data-testid="stTextInput-scanned_result"]');
+                if (input && !input.id) {
+                    input.id = 'scanned_code_input';
+                }
+            });
             
-            if scanned_code:
-                if add_part(scanned_code, from_scanner=True):
-                    # Clear the input and continue scanning
-                    st.session_state.scanned_result = ""
-                    st.rerun()
+            observer.observe(document.body, {
+                childList: true,
+                subtree: true
+            });
+        </script>
+        """, unsafe_allow_html=True)
+        
+        # Process scanned code
+        if scanned_code and scanned_code.strip():
+            if add_part(scanned_code, from_scanner=True):
+                # Clear the input and continue scanning
+                st.session_state.scanned_result = ""
+                st.rerun()
         
         # Scanner controls
         col1, col2 = st.columns(2)
         with col1:
             if st.button("🔄 Restart Scanner", key="restart_scanner"):
+                st.markdown("""
+                <script>
+                    stopScanner();
+                    setTimeout(startScanner, 500);
+                </script>
+                """, unsafe_allow_html=True)
                 st.rerun()
         
         with col2:
             if st.button("❌ Close Scanner", key="close_scanner"):
+                st.markdown("""
+                <script>
+                    stopScanner();
+                </script>
+                """, unsafe_allow_html=True)
                 st.session_state.scanning_mode = None
                 st.rerun()
         
