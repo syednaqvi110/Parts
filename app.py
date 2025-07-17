@@ -31,8 +31,6 @@ if 'last_scan_time' not in st.session_state:
     st.session_state.last_scan_time = 0
 if 'scanner_key' not in st.session_state:
     st.session_state.scanner_key = 0
-if 'processing_ui_action' not in st.session_state:
-    st.session_state.processing_ui_action = False
 
 # Scan cooldown to prevent rapid duplicate scans
 SCAN_COOLDOWN = 1.5  # 1.5 seconds between same codes
@@ -84,21 +82,25 @@ def add_part(barcode, from_scanner=False):
 def remove_part(index):
     """Remove part from list"""
     if 0 <= index < len(st.session_state.parts):
-        # Set flag to prevent scanner from processing during UI action
-        st.session_state.processing_ui_action = True
         removed = st.session_state.parts.pop(index)
+        # Change scanner key to reset scanner state - same approach as close scanner
+        st.session_state.scanner_key += 1
+        # Clear any scanner state to prevent duplicate processing
+        for key in list(st.session_state.keys()):
+            if key.startswith('qrcode_scanner'):
+                del st.session_state[key]
         st.success(f"🗑️ Removed: {removed['barcode']}")
-        # Reset flag after action
-        st.session_state.processing_ui_action = False
 
 def update_quantity(index, new_qty):
     """Update part quantity"""
     if 0 <= index < len(st.session_state.parts) and new_qty > 0:
-        # Set flag to prevent scanner from processing during UI action
-        st.session_state.processing_ui_action = True
         st.session_state.parts[index]['quantity'] = new_qty
-        # Reset flag after action
-        st.session_state.processing_ui_action = False
+        # Change scanner key to reset scanner state - same approach as close scanner
+        st.session_state.scanner_key += 1
+        # Clear any scanner state to prevent duplicate processing
+        for key in list(st.session_state.keys()):
+            if key.startswith('qrcode_scanner'):
+                del st.session_state[key]
 
 def save_transfer_data(from_location, to_location, parts_data):
     """Save transfer to Google Sheets"""
@@ -132,7 +134,6 @@ def reset_transfer():
     st.session_state.last_scanned_code = ""
     st.session_state.last_scan_time = 0
     st.session_state.scanner_key = 0
-    st.session_state.processing_ui_action = False
 
 # CSS for better UI
 st.markdown("""
@@ -228,8 +229,8 @@ if st.session_state.scanning_mode == "qr_scanner":
                 scanner_key = f'qrcode_scanner_{st.session_state.scanner_key}'
                 qr_code = qrcode_scanner(key=scanner_key)
                 
-                # Process scanned code immediately - but not during UI actions
-                if qr_code and not st.session_state.processing_ui_action:
+                # Process scanned code immediately
+                if qr_code:
                     if add_part(qr_code, from_scanner=True):
                         st.rerun()
                     
