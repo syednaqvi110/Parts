@@ -236,24 +236,29 @@ if st.session_state.scanning_mode == "qr":
         # Always show camera info
         st.info("📱 **QR Scanner Active** - Point camera at QR code")
         
-        # QR Code Scanner (always active - camera stays open)
+        # Create unique scanner key that changes after each successful scan
+        # This forces the component to reset and allows same QR code detection
+        if show_popup:
+            scanner_key = f'scanner_processing_{int(st.session_state.scan_success_time)}'
+        else:
+            scanner_key = f'scanner_ready_{int(current_time // 3)}'  # Changes every 3 seconds when ready
+        
+        # QR Code Scanner with dynamic key to reset state
         if not st.session_state.scanner_closing:
-            qr_code = qrcode_scanner(key='qr_scanner_active')
+            qr_code = qrcode_scanner(key=scanner_key)
             
-            # Process scans - only block during popup display, but allow after 2 seconds
-            if qr_code and not st.session_state.scanner_closing:
-                # Allow scanning if no popup or popup time has expired
-                if not show_popup:
-                    if add_part(qr_code, from_scanner=True):
-                        # Trigger vibration on mobile if available
-                        st.markdown("""
-                        <script>
-                        if (navigator.vibrate) {
-                            navigator.vibrate([200, 100, 200]);
-                        }
-                        </script>
-                        """, unsafe_allow_html=True)
-                        st.rerun()
+            # Process scans - only when popup is not showing
+            if qr_code and not st.session_state.scanner_closing and not show_popup:
+                if add_part(qr_code, from_scanner=True):
+                    # Trigger vibration on mobile if available
+                    st.markdown("""
+                    <script>
+                    if (navigator.vibrate) {
+                        navigator.vibrate([200, 100, 200]);
+                    }
+                    </script>
+                    """, unsafe_allow_html=True)
+                    st.rerun()
         
         # Option to close scanner (always enabled)
         col1, col2, col3 = st.columns([1, 2, 1])
@@ -408,3 +413,4 @@ if st.session_state.parts:
     if st.button("🔄 Clear All Parts", help="Emergency reset - clear all parts"):
         reset_transfer()
         st.rerun()
+        
