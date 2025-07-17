@@ -364,49 +364,6 @@ if st.session_state.scanning_mode == "qr_scanner":
             // Stop scanner when page unloads
             window.addEventListener('beforeunload', stopQRScanner);
         </script>
-        """, unsafe_allow_html=True).name === 'NotSupportedError') {
-                            errorMsg += "Camera not supported in this browser";
-                        } else {
-                            errorMsg += "Error: " + err.message;
-                        }
-                        
-                        updateStatus(errorMsg, true);
-                    });
-            }
-            
-            function stopScanner() {
-                if (html5QrCode && isScanning) {
-                    html5QrCode.stop().then(() => {
-                        isScanning = false;
-                        scannerStarted = false;
-                        console.log("QR Scanner stopped");
-                        updateStatus("Scanner stopped");
-                    }).catch(err => {
-                        console.error("Error stopping scanner:", err);
-                    });
-                }
-            }
-            
-            // Auto-start scanner when the section loads
-            if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', function() {
-                    setTimeout(startScanner, 500);
-                });
-            } else {
-                setTimeout(startScanner, 500);
-            }
-            
-            // Stop scanner when page unloads
-            window.addEventListener('beforeunload', stopScanner);
-            
-            // Expose functions globally for button access
-            window.restartQRScanner = function() {
-                stopScanner();
-                setTimeout(startScanner, 1000);
-            };
-            
-            window.stopQRScanner = stopScanner;
-        </script>
         """, unsafe_allow_html=True)
         
         # Hidden input to capture scanned results
