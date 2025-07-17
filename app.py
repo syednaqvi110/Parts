@@ -172,7 +172,7 @@ with st.container():
     with col1:
         from_location = st.text_input("From Location", placeholder="Main Warehouse")
     with col2:
-        to_location = st.text_input("To Location", placeholder="OTT19001")
+        to_location = st.text_input("To Location", placeholder="")
 
 # Input Method Selection
 st.header("📱 Add Parts")
