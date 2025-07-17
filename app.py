@@ -27,11 +27,16 @@ if 'last_scan_time' not in st.session_state:
     st.session_state.last_scan_time = 0
 if 'scanning_mode' not in st.session_state:
     st.session_state.scanning_mode = None
+if 'scan_success_time' not in st.session_state:
+    st.session_state.scan_success_time = 0
+if 'scanner_closing' not in st.session_state:
+    st.session_state.scanner_closing = False
 
 # Scan cooldown period (2 seconds)
 SCAN_COOLDOWN = 2.0
+SUCCESS_POPUP_DURATION = 2.0
 
-def add_part(barcode):
+def add_part(barcode, from_scanner=False):
     """Add or update part in the list"""
     if not barcode or len(barcode.strip()) < 2:
         st.error("Invalid QR code")
@@ -40,19 +45,24 @@ def add_part(barcode):
     barcode = barcode.strip().upper()
     current_time = time.time()
     
-    # Prevent duplicate rapid scans (2 second cooldown)
-    if (barcode == st.session_state.last_scanned_code and 
-        current_time - st.session_state.last_scan_time < SCAN_COOLDOWN):
-        return False
-    
-    st.session_state.last_scanned_code = barcode
-    st.session_state.last_scan_time = current_time
+    # For scanner: allow same item multiple times, but with cooldown
+    if from_scanner:
+        if (barcode == st.session_state.last_scanned_code and 
+            current_time - st.session_state.last_scan_time < SCAN_COOLDOWN):
+            return False
+        
+        st.session_state.last_scanned_code = barcode
+        st.session_state.last_scan_time = current_time
+        st.session_state.scan_success_time = current_time
     
     # Check if part already exists
     for part in st.session_state.parts:
         if part['barcode'] == barcode:
             part['quantity'] += 1
-            st.success(f"✅ Updated: {barcode} (qty: {part['quantity']})")
+            if from_scanner:
+                st.success(f"🎯 Item Scanned! {barcode} (qty: {part['quantity']})")
+            else:
+                st.success(f"✅ Updated: {barcode} (qty: {part['quantity']})")
             return True
     
     # Add new part
@@ -61,7 +71,11 @@ def add_part(barcode):
         'quantity': 1,
         'timestamp': datetime.now()
     })
-    st.success(f"✅ Added: {barcode}")
+    
+    if from_scanner:
+        st.success(f"🎯 Item Scanned! Added: {barcode}")
+    else:
+        st.success(f"✅ Added: {barcode}")
     return True
 
 def remove_part(index):
@@ -106,6 +120,8 @@ def reset_transfer():
     st.session_state.last_scanned_code = ""
     st.session_state.last_scan_time = 0
     st.session_state.scanning_mode = None
+    st.session_state.scan_success_time = 0
+    st.session_state.scanner_closing = False
 
 # CSS for better UI
 st.markdown("""
@@ -136,6 +152,9 @@ st.markdown("""
         border-radius: 10px;
         margin: 10px 0;
     }
+    input[type="text"] {
+        font-size: 16px !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -162,6 +181,7 @@ with st.container():
     with col1:
         if st.button("📷 Scan QR Code", type="primary" if st.session_state.scanning_mode == "qr" else "secondary"):
             st.session_state.scanning_mode = "qr"
+            st.session_state.scanner_closing = False
             st.rerun()
     
     with col2:
@@ -176,18 +196,24 @@ if st.session_state.scanning_mode == "qr":
     with st.container():
         st.markdown('<div class="scanning-section scanner-active">', unsafe_allow_html=True)
         
-        st.info("📱 **QR Scanner Active** - Point camera at QR code")
-        st.caption("⏱️ 2-second cooldown between scans to prevent duplicates")
+        current_time = time.time()
         
-        # QR Code Scanner (only when mode is selected)
-        qr_code = qrcode_scanner(key='qr_scanner_active')
+        # Check if we should hide success popup
+        if current_time - st.session_state.scan_success_time > SUCCESS_POPUP_DURATION:
+            st.info("📱 **QR Scanner Active** - Point camera at QR code")
+            st.caption("✨ Camera stays open for continuous scanning")
         
-        if qr_code:
-            if add_part(qr_code):
-                st.rerun()
+        # QR Code Scanner (stays active)
+        if not st.session_state.scanner_closing:
+            qr_code = qrcode_scanner(key='qr_scanner_active')
+            
+            if qr_code and not st.session_state.scanner_closing:
+                if add_part(qr_code, from_scanner=True):
+                    st.rerun()
         
         # Option to close scanner
         if st.button("❌ Close Scanner", key="close_scanner"):
+            st.session_state.scanner_closing = True
             st.session_state.scanning_mode = None
             st.rerun()
         
@@ -198,14 +224,26 @@ elif st.session_state.scanning_mode == "manual":
     with st.container():
         st.markdown('<div class="scanning-section">', unsafe_allow_html=True)
         
-        st.info("⌨️ **Manual Entry Mode** - Type part numbers")
+        st.info("⌨️ **Manual Entry Mode** - Enter/Scan part number")
         
-        # Form for Enter key support
+        # Auto-focus script for mobile
+        st.markdown("""
+        <script>
+        setTimeout(function() {
+            var inputs = document.querySelectorAll('input[type="text"]');
+            if (inputs.length > 2) {
+                inputs[2].focus();
+            }
+        }, 100);
+        </script>
+        """, unsafe_allow_html=True)
+        
+        # Form for Enter key support with mobile-friendly input
         with st.form(key='manual_form', clear_on_submit=True):
             manual_code = st.text_input(
-                "Enter part number or QR code", 
-                placeholder="Type and press Enter",
-                help="Enter any part number or QR code value"
+                "Enter/Scan part number", 
+                placeholder="Type or scan part number",
+                help="Use keyboard or physical scanner"
             )
             
             col1, col2 = st.columns([3, 1])
@@ -213,7 +251,7 @@ elif st.session_state.scanning_mode == "manual":
                 submitted = st.form_submit_button("Add Part", type="primary")
             
             if submitted and manual_code:
-                if add_part(manual_code):
+                if add_part(manual_code, from_scanner=False):
                     st.rerun()
         
         # Option to close manual entry
