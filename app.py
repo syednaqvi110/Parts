@@ -26,8 +26,8 @@ if 'last_scanned_code' not in st.session_state:
     st.session_state.last_scanned_code = ""
 if 'last_scan_time' not in st.session_state:
     st.session_state.last_scan_time = 0
-if 'closing_scanner' not in st.session_state:
-    st.session_state.closing_scanner = False
+if 'scanner_key' not in st.session_state:
+    st.session_state.scanner_key = 0
 
 # Scan cooldown to prevent rapid duplicate scans
 SCAN_COOLDOWN = 1.5  # 1.5 seconds between same codes
@@ -118,7 +118,7 @@ def reset_transfer():
     st.session_state.scanning_mode = None
     st.session_state.last_scanned_code = ""
     st.session_state.last_scan_time = 0
-    st.session_state.closing_scanner = False
+    st.session_state.scanner_key = 0
 
 # CSS for better UI
 st.markdown("""
@@ -194,33 +194,34 @@ if st.session_state.scanning_mode == "qr_scanner":
         
         st.info("📱 **QR Scanner Active** - Continuously scans QR codes")
         
+        # Close button FIRST - before scanner renders
+        if st.button("❌ Close Scanner", key="close_scanner"):
+            st.session_state.scanning_mode = None
+            # Change the scanner key to completely reset it
+            st.session_state.scanner_key += 1
+            # Clear any scanner state
+            for key in list(st.session_state.keys()):
+                if key.startswith('qrcode_scanner'):
+                    del st.session_state[key]
+            st.rerun()
+        
         try:
             from streamlit_qrcode_scanner import qrcode_scanner
             
-            # This is the working QR scanner that continuously scans
-            qr_code = qrcode_scanner(key='qrcode_scanner')
-            
-            # Process scanned code immediately - but only if we're not closing the scanner
-            if qr_code and not st.session_state.closing_scanner:
-                if add_part(qr_code, from_scanner=True):
-                    st.rerun()
+            # Only render scanner if we're not closing
+            if st.session_state.scanning_mode == "qr_scanner":
+                # Use a unique key that changes when we reset
+                scanner_key = f'qrcode_scanner_{st.session_state.scanner_key}'
+                qr_code = qrcode_scanner(key=scanner_key)
+                
+                # Process scanned code immediately
+                if qr_code:
+                    if add_part(qr_code, from_scanner=True):
+                        st.rerun()
                     
         except ImportError:
             st.error("❌ QR Scanner library not installed. Please install: pip install streamlit-qrcode-scanner")
             st.info("💡 Use Manual Entry mode instead")
-        
-        # Option to close scanner
-        if st.button("❌ Close Scanner", key="close_scanner"):
-            # Set flag to prevent processing any pending scans
-            st.session_state.closing_scanner = True
-            # Clear any pending scanner state to prevent duplicate processing
-            st.session_state.scanning_mode = None
-            # Force a clean state by clearing the scanner key
-            if 'qrcode_scanner' in st.session_state:
-                del st.session_state['qrcode_scanner']
-            # Reset the closing flag for next time
-            st.session_state.closing_scanner = False
-            st.rerun()
         
         st.markdown('</div>', unsafe_allow_html=True)
 
