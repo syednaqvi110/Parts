@@ -215,18 +215,20 @@ if st.session_state.scanning_mode == "qr":
         st.markdown('<div class="scanning-section scanner-active">', unsafe_allow_html=True)
         
         current_time = time.time()
-        scanning_blocked = current_time - st.session_state.scan_success_time <= SUCCESS_POPUP_DURATION and st.session_state.scan_success_time > 0
+        show_popup = current_time - st.session_state.scan_success_time <= SUCCESS_POPUP_DURATION and st.session_state.scan_success_time > 0
         
         # Show popup overlay if recently scanned
-        if scanning_blocked and st.session_state.last_popup_message:
+        if show_popup and st.session_state.last_popup_message:
             st.markdown(f"""
-            <div class="scan-popup">
+            <div class="scan-popup" id="scanPopup">
                 {st.session_state.last_popup_message}
             </div>
             <script>
             setTimeout(function() {{
-                var popup = document.querySelector('.scan-popup');
-                if (popup) popup.style.display = 'none';
+                var popup = document.getElementById('scanPopup');
+                if (popup) {{
+                    popup.style.display = 'none';
+                }}
             }}, 2000);
             </script>
             """, unsafe_allow_html=True)
@@ -238,23 +240,25 @@ if st.session_state.scanning_mode == "qr":
         if not st.session_state.scanner_closing:
             qr_code = qrcode_scanner(key='qr_scanner_active')
             
-            # Only process scans when not in popup mode
-            if qr_code and not st.session_state.scanner_closing and not scanning_blocked:
-                if add_part(qr_code, from_scanner=True):
-                    # Trigger vibration on mobile if available
-                    st.markdown("""
-                    <script>
-                    if (navigator.vibrate) {
-                        navigator.vibrate([200, 100, 200]);
-                    }
-                    </script>
-                    """, unsafe_allow_html=True)
-                    st.rerun()
+            # Process scans - only block during popup display, but allow after 2 seconds
+            if qr_code and not st.session_state.scanner_closing:
+                # Allow scanning if no popup or popup time has expired
+                if not show_popup:
+                    if add_part(qr_code, from_scanner=True):
+                        # Trigger vibration on mobile if available
+                        st.markdown("""
+                        <script>
+                        if (navigator.vibrate) {
+                            navigator.vibrate([200, 100, 200]);
+                        }
+                        </script>
+                        """, unsafe_allow_html=True)
+                        st.rerun()
         
-        # Option to close scanner (disabled during popup to prevent accidental +1)
+        # Option to close scanner (always enabled)
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
-            if st.button("❌ Close Scanner", key="close_scanner", disabled=scanning_blocked):
+            if st.button("❌ Close Scanner", key="close_scanner"):
                 st.session_state.scanner_closing = True
                 st.session_state.scanning_mode = None
                 st.session_state.scan_success_time = 0
