@@ -4,7 +4,6 @@ from datetime import datetime
 import requests
 import json
 import time
-from streamlit_qrcode_scanner import qrcode_scanner
 
 # Configure page
 st.set_page_config(
@@ -21,22 +20,15 @@ if 'parts' not in st.session_state:
     st.session_state.parts = []
 if 'transfer_complete' not in st.session_state:
     st.session_state.transfer_complete = False
+if 'scanning_mode' not in st.session_state:
+    st.session_state.scanning_mode = None
 if 'last_scanned_code' not in st.session_state:
     st.session_state.last_scanned_code = ""
 if 'last_scan_time' not in st.session_state:
     st.session_state.last_scan_time = 0
-if 'scanning_mode' not in st.session_state:
-    st.session_state.scanning_mode = None
-if 'scan_success_time' not in st.session_state:
-    st.session_state.scan_success_time = 0
-if 'scanner_closing' not in st.session_state:
-    st.session_state.scanner_closing = False
-if 'last_popup_message' not in st.session_state:
-    st.session_state.last_popup_message = ""
 
-# Scan cooldown period (2 seconds)
-SCAN_COOLDOWN = 2.0
-SUCCESS_POPUP_DURATION = 2.0
+# Scan cooldown to prevent rapid duplicate scans
+SCAN_COOLDOWN = 1.5  # 1.5 seconds between same codes
 
 def add_part(barcode, from_scanner=False):
     """Add or update part in the list"""
@@ -50,18 +42,27 @@ def add_part(barcode, from_scanner=False):
     barcode = barcode.strip().upper()
     current_time = time.time()
     
-    # For scanner: allow same item multiple times, no cooldown
+    # For scanner: prevent rapid duplicate scans but allow intentional repeats
     if from_scanner:
+        if (barcode == st.session_state.last_scanned_code and 
+            current_time - st.session_state.last_scan_time < SCAN_COOLDOWN):
+            return False  # Too soon, ignore
+        
         st.session_state.last_scanned_code = barcode
         st.session_state.last_scan_time = current_time
-        st.session_state.scan_success_time = current_time
     
     # Check if part already exists
     for part in st.session_state.parts:
         if part['barcode'] == barcode:
             part['quantity'] += 1
             if from_scanner:
-                st.session_state.last_popup_message = f"🎯 Item: {barcode} scanned (Total qty: {part['quantity']})"
+                st.success(f"🎯 Item: {barcode} scanned (Total qty: {part['quantity']})")
+                # Trigger vibration
+                st.markdown("""
+                <script>
+                if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+                </script>
+                """, unsafe_allow_html=True)
             else:
                 st.success(f"✅ Updated: {barcode} (qty: {part['quantity']})")
             return True
@@ -74,7 +75,13 @@ def add_part(barcode, from_scanner=False):
     })
     
     if from_scanner:
-        st.session_state.last_popup_message = f"🎯 Item: {barcode} scanned (Total qty: 1)"
+        st.success(f"🎯 Item: {barcode} scanned (Total qty: 1)")
+        # Trigger vibration
+        st.markdown("""
+        <script>
+        if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+        </script>
+        """, unsafe_allow_html=True)
     else:
         st.success(f"✅ Added: {barcode}")
     return True
@@ -118,12 +125,9 @@ def reset_transfer():
     """Reset everything for new transfer"""
     st.session_state.parts = []
     st.session_state.transfer_complete = False
+    st.session_state.scanning_mode = None
     st.session_state.last_scanned_code = ""
     st.session_state.last_scan_time = 0
-    st.session_state.scanning_mode = None
-    st.session_state.scan_success_time = 0
-    st.session_state.scanner_closing = False
-    st.session_state.last_popup_message = ""
 
 # CSS for better UI
 st.markdown("""
@@ -157,22 +161,6 @@ st.markdown("""
     input[type="text"] {
         font-size: 16px !important;
     }
-    .scan-popup {
-        position: fixed;
-        top: 20%;
-        left: 50%;
-        transform: translateX(-50%);
-        background: #28a745;
-        color: white;
-        padding: 20px 30px;
-        border-radius: 15px;
-        font-size: 18px;
-        font-weight: bold;
-        z-index: 9999;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-        text-align: center;
-        min-width: 250px;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -199,7 +187,6 @@ with st.container():
     with col1:
         if st.button("📷 Scan QR Code", type="primary" if st.session_state.scanning_mode == "qr" else "secondary"):
             st.session_state.scanning_mode = "qr"
-            st.session_state.scanner_closing = False
             st.rerun()
     
     with col2:
@@ -209,66 +196,31 @@ with st.container():
     
     st.markdown('</div>', unsafe_allow_html=True)
 
-# QR Code Scanning Section
+# QR Code Scanning Section - SIMPLIFIED
 if st.session_state.scanning_mode == "qr":
     with st.container():
         st.markdown('<div class="scanning-section scanner-active">', unsafe_allow_html=True)
         
-        current_time = time.time()
-        show_popup = current_time - st.session_state.scan_success_time <= SUCCESS_POPUP_DURATION and st.session_state.scan_success_time > 0
-        
-        # Show popup overlay if recently scanned
-        if show_popup and st.session_state.last_popup_message:
-            st.markdown(f"""
-            <div class="scan-popup" id="scanPopup">
-                {st.session_state.last_popup_message}
-            </div>
-            <script>
-            setTimeout(function() {{
-                var popup = document.getElementById('scanPopup');
-                if (popup) {{
-                    popup.style.display = 'none';
-                }}
-            }}, 2000);
-            </script>
-            """, unsafe_allow_html=True)
-        
-        # Always show camera info
         st.info("📱 **QR Scanner Active** - Point camera at QR code")
         
-        # Create unique scanner key that changes after each successful scan
-        # This forces the component to reset and allows same QR code detection
-        if show_popup:
-            scanner_key = f'scanner_processing_{int(st.session_state.scan_success_time)}'
-        else:
-            scanner_key = f'scanner_ready_{int(current_time // 3)}'  # Changes every 3 seconds when ready
-        
-        # QR Code Scanner with dynamic key to reset state
-        if not st.session_state.scanner_closing:
-            qr_code = qrcode_scanner(key=scanner_key)
+        # Import and use the better barcode scanner
+        try:
+            from streamlit_barcode_scanner import qr_scanner
             
-            # Process scans - only when popup is not showing
-            if qr_code and not st.session_state.scanner_closing and not show_popup:
-                if add_part(qr_code, from_scanner=True):
-                    # Trigger vibration on mobile if available
-                    st.markdown("""
-                    <script>
-                    if (navigator.vibrate) {
-                        navigator.vibrate([200, 100, 200]);
-                    }
-                    </script>
-                    """, unsafe_allow_html=True)
+            # Simple scanner call - handles everything automatically
+            scanned_code = qr_scanner(key="barcode_scanner")
+            
+            if scanned_code:
+                if add_part(scanned_code, from_scanner=True):
                     st.rerun()
+                    
+        except ImportError:
+            st.error("Barcode scanner not available. Please use manual entry.")
         
-        # Option to close scanner (always enabled)
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            if st.button("❌ Close Scanner", key="close_scanner"):
-                st.session_state.scanner_closing = True
-                st.session_state.scanning_mode = None
-                st.session_state.scan_success_time = 0
-                st.session_state.last_popup_message = ""
-                st.rerun()
+        # Option to close scanner
+        if st.button("❌ Close Scanner", key="close_scanner"):
+            st.session_state.scanning_mode = None
+            st.rerun()
         
         st.markdown('</div>', unsafe_allow_html=True)
 
@@ -279,36 +231,27 @@ elif st.session_state.scanning_mode == "manual":
         
         st.info("⌨️ **Manual Entry Mode** - Enter part numbers")
         
-        # Auto-focus script for mobile - enhanced
+        # Auto-focus script
         st.markdown("""
         <script>
-        function focusInput() {
-            setTimeout(function() {
-                var inputs = document.querySelectorAll('input[type="text"]');
-                var targetInput = null;
-                for (var i = 0; i < inputs.length; i++) {
-                    if (inputs[i].placeholder && inputs[i].placeholder.includes('Type or scan')) {
-                        targetInput = inputs[i];
-                        break;
-                    }
+        setTimeout(function() {
+            var inputs = document.querySelectorAll('input[type="text"]');
+            for (var i = 0; i < inputs.length; i++) {
+                if (inputs[i].placeholder && inputs[i].placeholder.includes('Type or scan')) {
+                    inputs[i].focus();
+                    break;
                 }
-                if (targetInput) {
-                    targetInput.focus();
-                    targetInput.click();
-                }
-            }, 200);
-        }
-        focusInput();
+            }
+        }, 200);
         </script>
         """, unsafe_allow_html=True)
         
-        # Form for Enter key support with mobile-friendly input
+        # Form for Enter key support
         with st.form(key='manual_form', clear_on_submit=True):
             manual_code = st.text_input(
                 "Enter/Scan part number", 
                 placeholder="Type or scan part number then press Enter",
-                help="Use keyboard or physical scanner",
-                key="manual_input_field"
+                help="Use keyboard or physical scanner"
             )
             
             col1, col2 = st.columns([3, 1])
@@ -413,4 +356,3 @@ if st.session_state.parts:
     if st.button("🔄 Clear All Parts", help="Emergency reset - clear all parts"):
         reset_transfer()
         st.rerun()
-        
