@@ -31,6 +31,8 @@ if 'scan_success_time' not in st.session_state:
     st.session_state.scan_success_time = 0
 if 'scanner_closing' not in st.session_state:
     st.session_state.scanner_closing = False
+if 'last_popup_message' not in st.session_state:
+    st.session_state.last_popup_message = ""
 
 # Scan cooldown period (2 seconds)
 SCAN_COOLDOWN = 2.0
@@ -48,7 +50,7 @@ def add_part(barcode, from_scanner=False):
     barcode = barcode.strip().upper()
     current_time = time.time()
     
-    # For scanner: allow same item multiple times, but with cooldown
+    # For scanner: allow same item multiple times, no cooldown
     if from_scanner:
         st.session_state.last_scanned_code = barcode
         st.session_state.last_scan_time = current_time
@@ -59,7 +61,7 @@ def add_part(barcode, from_scanner=False):
         if part['barcode'] == barcode:
             part['quantity'] += 1
             if from_scanner:
-                st.success(f"🎯 Item: {barcode} scanned (Total qty: {part['quantity']})")
+                st.session_state.last_popup_message = f"🎯 Item: {barcode} scanned (Total qty: {part['quantity']})"
             else:
                 st.success(f"✅ Updated: {barcode} (qty: {part['quantity']})")
             return True
@@ -72,7 +74,7 @@ def add_part(barcode, from_scanner=False):
     })
     
     if from_scanner:
-        st.success(f"🎯 Item: {barcode} scanned (Total qty: 1)")
+        st.session_state.last_popup_message = f"🎯 Item: {barcode} scanned (Total qty: 1)"
     else:
         st.success(f"✅ Added: {barcode}")
     return True
@@ -121,6 +123,7 @@ def reset_transfer():
     st.session_state.scanning_mode = None
     st.session_state.scan_success_time = 0
     st.session_state.scanner_closing = False
+    st.session_state.last_popup_message = ""
 
 # CSS for better UI
 st.markdown("""
@@ -153,6 +156,22 @@ st.markdown("""
     }
     input[type="text"] {
         font-size: 16px !important;
+    }
+    .scan-popup {
+        position: fixed;
+        top: 20%;
+        left: 50%;
+        transform: translateX(-50%);
+        background: #28a745;
+        color: white;
+        padding: 20px 30px;
+        border-radius: 15px;
+        font-size: 18px;
+        font-weight: bold;
+        z-index: 9999;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        text-align: center;
+        min-width: 250px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -198,6 +217,20 @@ if st.session_state.scanning_mode == "qr":
         current_time = time.time()
         scanning_blocked = current_time - st.session_state.scan_success_time <= SUCCESS_POPUP_DURATION and st.session_state.scan_success_time > 0
         
+        # Show popup overlay if recently scanned
+        if scanning_blocked and st.session_state.last_popup_message:
+            st.markdown(f"""
+            <div class="scan-popup">
+                {st.session_state.last_popup_message}
+            </div>
+            <script>
+            setTimeout(function() {{
+                var popup = document.querySelector('.scan-popup');
+                if (popup) popup.style.display = 'none';
+            }}, 2000);
+            </script>
+            """, unsafe_allow_html=True)
+        
         # Always show camera info
         st.info("📱 **QR Scanner Active** - Point camera at QR code")
         
@@ -225,6 +258,7 @@ if st.session_state.scanning_mode == "qr":
                 st.session_state.scanner_closing = True
                 st.session_state.scanning_mode = None
                 st.session_state.scan_success_time = 0
+                st.session_state.last_popup_message = ""
                 st.rerun()
         
         st.markdown('</div>', unsafe_allow_html=True)
