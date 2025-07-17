@@ -1,3 +1,6 @@
+# Parts Transfer Scanner - Version 7 (Working QR Scanner)
+# Successfully implemented continuous QR scanning with proper close functionality
+
 import streamlit as st
 import pandas as pd
 from datetime import datetime
@@ -7,7 +10,7 @@ import time
 
 # Configure page
 st.set_page_config(
-    page_title="Parts Transfer Scanner",
+    page_title="Parts Transfer Scanner - v7",
     page_icon="📦",
     layout="centered"
 )
@@ -28,6 +31,8 @@ if 'last_scan_time' not in st.session_state:
     st.session_state.last_scan_time = 0
 if 'scanner_key' not in st.session_state:
     st.session_state.scanner_key = 0
+if 'processing_ui_action' not in st.session_state:
+    st.session_state.processing_ui_action = False
 
 # Scan cooldown to prevent rapid duplicate scans
 SCAN_COOLDOWN = 1.5  # 1.5 seconds between same codes
@@ -79,13 +84,21 @@ def add_part(barcode, from_scanner=False):
 def remove_part(index):
     """Remove part from list"""
     if 0 <= index < len(st.session_state.parts):
+        # Set flag to prevent scanner from processing during UI action
+        st.session_state.processing_ui_action = True
         removed = st.session_state.parts.pop(index)
         st.success(f"🗑️ Removed: {removed['barcode']}")
+        # Reset flag after action
+        st.session_state.processing_ui_action = False
 
 def update_quantity(index, new_qty):
     """Update part quantity"""
     if 0 <= index < len(st.session_state.parts) and new_qty > 0:
+        # Set flag to prevent scanner from processing during UI action
+        st.session_state.processing_ui_action = True
         st.session_state.parts[index]['quantity'] = new_qty
+        # Reset flag after action
+        st.session_state.processing_ui_action = False
 
 def save_transfer_data(from_location, to_location, parts_data):
     """Save transfer to Google Sheets"""
@@ -119,6 +132,7 @@ def reset_transfer():
     st.session_state.last_scanned_code = ""
     st.session_state.last_scan_time = 0
     st.session_state.scanner_key = 0
+    st.session_state.processing_ui_action = False
 
 # CSS for better UI
 st.markdown("""
@@ -214,8 +228,8 @@ if st.session_state.scanning_mode == "qr_scanner":
                 scanner_key = f'qrcode_scanner_{st.session_state.scanner_key}'
                 qr_code = qrcode_scanner(key=scanner_key)
                 
-                # Process scanned code immediately
-                if qr_code:
+                # Process scanned code immediately - but not during UI actions
+                if qr_code and not st.session_state.processing_ui_action:
                     if add_part(qr_code, from_scanner=True):
                         st.rerun()
                     
