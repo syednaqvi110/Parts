@@ -85,16 +85,14 @@ def remove_part(index):
     """Remove part from list"""
     if 0 <= index < len(st.session_state.parts):
         removed = st.session_state.parts.pop(index)
-        # Clear last processed code to prevent reprocessing
-        st.session_state.last_processed_code = ""
+        # DON'T clear last_processed_code - we want to keep it to prevent reprocessing
         st.success(f"🗑️ Removed: {removed['barcode']}")
 
 def update_quantity(index, new_qty):
     """Update part quantity"""
     if 0 <= index < len(st.session_state.parts) and new_qty > 0:
         st.session_state.parts[index]['quantity'] = new_qty
-        # Clear last processed code to prevent reprocessing
-        st.session_state.last_processed_code = ""
+        # DON'T clear last_processed_code - we want to keep it to prevent reprocessing
 
 def save_transfer_data(from_location, to_location, parts_data):
     """Save transfer to Google Sheets"""
