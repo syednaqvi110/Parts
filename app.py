@@ -198,8 +198,10 @@ if st.session_state.scanning_mode == "qr":
         
         current_time = time.time()
         
-        # Check if we should hide success popup
-        if current_time - st.session_state.scan_success_time > SUCCESS_POPUP_DURATION:
+        # Show scan success popup for 2 seconds
+        if current_time - st.session_state.scan_success_time <= SUCCESS_POPUP_DURATION and st.session_state.scan_success_time > 0:
+            st.success("🎯 **Item Scanned!** Ready for next scan...")
+        else:
             st.info("📱 **QR Scanner Active** - Point camera at QR code")
             st.caption("✨ Camera stays open for continuous scanning")
         
@@ -209,6 +211,14 @@ if st.session_state.scanning_mode == "qr":
             
             if qr_code and not st.session_state.scanner_closing:
                 if add_part(qr_code, from_scanner=True):
+                    # Trigger vibration on mobile if available
+                    st.markdown("""
+                    <script>
+                    if (navigator.vibrate) {
+                        navigator.vibrate([200, 100, 200]);
+                    }
+                    </script>
+                    """, unsafe_allow_html=True)
                     st.rerun()
         
         # Option to close scanner
@@ -224,17 +234,28 @@ elif st.session_state.scanning_mode == "manual":
     with st.container():
         st.markdown('<div class="scanning-section">', unsafe_allow_html=True)
         
-        st.info("⌨️ **Manual Entry Mode** - Enter/Scan part number")
+        st.info("⌨️ **Manual Entry Mode** - Enter part numbers")
         
-        # Auto-focus script for mobile
+        # Auto-focus script for mobile - enhanced
         st.markdown("""
         <script>
-        setTimeout(function() {
-            var inputs = document.querySelectorAll('input[type="text"]');
-            if (inputs.length > 2) {
-                inputs[2].focus();
-            }
-        }, 100);
+        function focusInput() {
+            setTimeout(function() {
+                var inputs = document.querySelectorAll('input[type="text"]');
+                var targetInput = null;
+                for (var i = 0; i < inputs.length; i++) {
+                    if (inputs[i].placeholder && inputs[i].placeholder.includes('Type or scan')) {
+                        targetInput = inputs[i];
+                        break;
+                    }
+                }
+                if (targetInput) {
+                    targetInput.focus();
+                    targetInput.click();
+                }
+            }, 200);
+        }
+        focusInput();
         </script>
         """, unsafe_allow_html=True)
         
@@ -242,8 +263,9 @@ elif st.session_state.scanning_mode == "manual":
         with st.form(key='manual_form', clear_on_submit=True):
             manual_code = st.text_input(
                 "Enter/Scan part number", 
-                placeholder="Type or scan part number",
-                help="Use keyboard or physical scanner"
+                placeholder="Type or scan part number then press Enter",
+                help="Use keyboard or physical scanner",
+                key="manual_input_field"
             )
             
             col1, col2 = st.columns([3, 1])
