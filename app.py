@@ -39,7 +39,10 @@ SUCCESS_POPUP_DURATION = 2.0
 def add_part(barcode, from_scanner=False):
     """Add or update part in the list"""
     if not barcode or len(barcode.strip()) < 2:
-        st.error("Invalid QR code")
+        if from_scanner:
+            st.error("Invalid QR code")
+        else:
+            st.error("Invalid part number")
         return False
     
     barcode = barcode.strip().upper()
@@ -47,10 +50,6 @@ def add_part(barcode, from_scanner=False):
     
     # For scanner: allow same item multiple times, but with cooldown
     if from_scanner:
-        if (barcode == st.session_state.last_scanned_code and 
-            current_time - st.session_state.last_scan_time < SCAN_COOLDOWN):
-            return False
-        
         st.session_state.last_scanned_code = barcode
         st.session_state.last_scan_time = current_time
         st.session_state.scan_success_time = current_time
@@ -60,7 +59,7 @@ def add_part(barcode, from_scanner=False):
         if part['barcode'] == barcode:
             part['quantity'] += 1
             if from_scanner:
-                st.success(f"🎯 Item Scanned! {barcode} (qty: {part['quantity']})")
+                st.success(f"🎯 Item: {barcode} scanned (Total qty: {part['quantity']})")
             else:
                 st.success(f"✅ Updated: {barcode} (qty: {part['quantity']})")
             return True
@@ -73,7 +72,7 @@ def add_part(barcode, from_scanner=False):
     })
     
     if from_scanner:
-        st.success(f"🎯 Item Scanned! Added: {barcode}")
+        st.success(f"🎯 Item: {barcode} scanned (Total qty: 1)")
     else:
         st.success(f"✅ Added: {barcode}")
     return True
@@ -197,35 +196,40 @@ if st.session_state.scanning_mode == "qr":
         st.markdown('<div class="scanning-section scanner-active">', unsafe_allow_html=True)
         
         current_time = time.time()
+        scanning_blocked = current_time - st.session_state.scan_success_time <= SUCCESS_POPUP_DURATION and st.session_state.scan_success_time > 0
         
-        # Show scan success popup for 2 seconds
-        if current_time - st.session_state.scan_success_time <= SUCCESS_POPUP_DURATION and st.session_state.scan_success_time > 0:
-            st.success("🎯 **Item Scanned!** Ready for next scan...")
+        # Show scan success popup for 2 seconds (blocks scanning during this time)
+        if scanning_blocked:
+            # Don't show the scanner during popup
+            pass
         else:
             st.info("📱 **QR Scanner Active** - Point camera at QR code")
             st.caption("✨ Camera stays open for continuous scanning")
-        
-        # QR Code Scanner (stays active)
-        if not st.session_state.scanner_closing:
-            qr_code = qrcode_scanner(key='qr_scanner_active')
             
-            if qr_code and not st.session_state.scanner_closing:
-                if add_part(qr_code, from_scanner=True):
-                    # Trigger vibration on mobile if available
-                    st.markdown("""
-                    <script>
-                    if (navigator.vibrate) {
-                        navigator.vibrate([200, 100, 200]);
-                    }
-                    </script>
-                    """, unsafe_allow_html=True)
-                    st.rerun()
+            # QR Code Scanner (only active when not in popup mode)
+            if not st.session_state.scanner_closing:
+                qr_code = qrcode_scanner(key='qr_scanner_active')
+                
+                if qr_code and not st.session_state.scanner_closing:
+                    if add_part(qr_code, from_scanner=True):
+                        # Trigger vibration on mobile if available
+                        st.markdown("""
+                        <script>
+                        if (navigator.vibrate) {
+                            navigator.vibrate([200, 100, 200]);
+                        }
+                        </script>
+                        """, unsafe_allow_html=True)
+                        st.rerun()
         
-        # Option to close scanner
-        if st.button("❌ Close Scanner", key="close_scanner"):
-            st.session_state.scanner_closing = True
-            st.session_state.scanning_mode = None
-            st.rerun()
+        # Option to close scanner (always available)
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            if st.button("❌ Close Scanner", key="close_scanner", disabled=scanning_blocked):
+                st.session_state.scanner_closing = True
+                st.session_state.scanning_mode = None
+                st.session_state.scan_success_time = 0  # Clear popup state
+                st.rerun()
         
         st.markdown('</div>', unsafe_allow_html=True)
 
