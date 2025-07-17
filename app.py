@@ -31,6 +31,8 @@ if 'last_scan_time' not in st.session_state:
     st.session_state.last_scan_time = 0
 if 'scanner_key' not in st.session_state:
     st.session_state.scanner_key = 0
+if 'last_processed_code' not in st.session_state:
+    st.session_state.last_processed_code = ""
 
 # Scan cooldown to prevent rapid duplicate scans
 SCAN_COOLDOWN = 1.5  # 1.5 seconds between same codes
@@ -83,24 +85,16 @@ def remove_part(index):
     """Remove part from list"""
     if 0 <= index < len(st.session_state.parts):
         removed = st.session_state.parts.pop(index)
-        # Change scanner key to reset scanner state - same approach as close scanner
-        st.session_state.scanner_key += 1
-        # Clear any scanner state to prevent duplicate processing
-        for key in list(st.session_state.keys()):
-            if key.startswith('qrcode_scanner'):
-                del st.session_state[key]
+        # Clear last processed code to prevent reprocessing
+        st.session_state.last_processed_code = ""
         st.success(f"🗑️ Removed: {removed['barcode']}")
 
 def update_quantity(index, new_qty):
     """Update part quantity"""
     if 0 <= index < len(st.session_state.parts) and new_qty > 0:
         st.session_state.parts[index]['quantity'] = new_qty
-        # Change scanner key to reset scanner state - same approach as close scanner
-        st.session_state.scanner_key += 1
-        # Clear any scanner state to prevent duplicate processing
-        for key in list(st.session_state.keys()):
-            if key.startswith('qrcode_scanner'):
-                del st.session_state[key]
+        # Clear last processed code to prevent reprocessing
+        st.session_state.last_processed_code = ""
 
 def save_transfer_data(from_location, to_location, parts_data):
     """Save transfer to Google Sheets"""
@@ -134,6 +128,7 @@ def reset_transfer():
     st.session_state.last_scanned_code = ""
     st.session_state.last_scan_time = 0
     st.session_state.scanner_key = 0
+    st.session_state.last_processed_code = ""
 
 # CSS for better UI
 st.markdown("""
@@ -229,8 +224,9 @@ if st.session_state.scanning_mode == "qr_scanner":
                 scanner_key = f'qrcode_scanner_{st.session_state.scanner_key}'
                 qr_code = qrcode_scanner(key=scanner_key)
                 
-                # Process scanned code immediately
-                if qr_code:
+                # Process scanned code only if it's new
+                if qr_code and qr_code != st.session_state.last_processed_code:
+                    st.session_state.last_processed_code = qr_code
                     if add_part(qr_code, from_scanner=True):
                         st.rerun()
                     
