@@ -170,9 +170,9 @@ st.title("📦 Parts Transfer")
 with st.container():
     col1, col2 = st.columns(2)
     with col1:
-        from_location = st.text_input("From Location", placeholder="")
+        from_location = st.text_input("From Location", placeholder="Main Warehouse")
     with col2:
-        to_location = st.text_input("To Location", placeholder="")
+        to_location = st.text_input("To Location", placeholder="OTT19001")
 
 # Input Method Selection
 st.header("📱 Add Parts")
@@ -257,16 +257,16 @@ elif st.session_state.scanning_mode == "manual":
         """, unsafe_allow_html=True)
         
         # Form for Enter key support
-        with st.form(key='manual_form', clear_on_submit=True):
+        with st.form(key='manual_form', clear_on_submit=True, border=False):
             manual_code = st.text_input(
                 "Enter/Scan part number", 
                 placeholder="Type or scan part number then press Enter",
-                help="Use keyboard or physical scanner"
+                help="Use keyboard or physical scanner",
+                label_visibility="collapsed"
             )
             
-            col1, col2 = st.columns([3, 1])
-            with col2:
-                submitted = st.form_submit_button("Add Part", type="primary")
+            # Hidden submit button to prevent browser tooltip
+            submitted = st.form_submit_button("Add Part", type="primary", use_container_width=True)
             
             if submitted and manual_code:
                 if add_part(manual_code, from_scanner=False):
