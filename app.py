@@ -198,37 +198,33 @@ if st.session_state.scanning_mode == "qr":
         current_time = time.time()
         scanning_blocked = current_time - st.session_state.scan_success_time <= SUCCESS_POPUP_DURATION and st.session_state.scan_success_time > 0
         
-        # Show scan success popup for 2 seconds (blocks scanning during this time)
-        if scanning_blocked:
-            # Don't show the scanner during popup
-            pass
-        else:
-            st.info("📱 **QR Scanner Active** - Point camera at QR code")
-            st.caption("✨ Camera stays open for continuous scanning")
-            
-            # QR Code Scanner (only active when not in popup mode)
-            if not st.session_state.scanner_closing:
-                qr_code = qrcode_scanner(key='qr_scanner_active')
-                
-                if qr_code and not st.session_state.scanner_closing:
-                    if add_part(qr_code, from_scanner=True):
-                        # Trigger vibration on mobile if available
-                        st.markdown("""
-                        <script>
-                        if (navigator.vibrate) {
-                            navigator.vibrate([200, 100, 200]);
-                        }
-                        </script>
-                        """, unsafe_allow_html=True)
-                        st.rerun()
+        # Always show camera info
+        st.info("📱 **QR Scanner Active** - Point camera at QR code")
         
-        # Option to close scanner (always available)
+        # QR Code Scanner (always active - camera stays open)
+        if not st.session_state.scanner_closing:
+            qr_code = qrcode_scanner(key='qr_scanner_active')
+            
+            # Only process scans when not in popup mode
+            if qr_code and not st.session_state.scanner_closing and not scanning_blocked:
+                if add_part(qr_code, from_scanner=True):
+                    # Trigger vibration on mobile if available
+                    st.markdown("""
+                    <script>
+                    if (navigator.vibrate) {
+                        navigator.vibrate([200, 100, 200]);
+                    }
+                    </script>
+                    """, unsafe_allow_html=True)
+                    st.rerun()
+        
+        # Option to close scanner (disabled during popup to prevent accidental +1)
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
             if st.button("❌ Close Scanner", key="close_scanner", disabled=scanning_blocked):
                 st.session_state.scanner_closing = True
                 st.session_state.scanning_mode = None
-                st.session_state.scan_success_time = 0  # Clear popup state
+                st.session_state.scan_success_time = 0
                 st.rerun()
         
         st.markdown('</div>', unsafe_allow_html=True)
