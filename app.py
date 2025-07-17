@@ -170,9 +170,9 @@ st.title("📦 Parts Transfer")
 with st.container():
     col1, col2 = st.columns(2)
     with col1:
-        from_location = st.text_input("From Location", placeholder="Main Warehouse")
+        from_location = st.text_input("From Location", placeholder="Type/Scan the location")
     with col2:
-        to_location = st.text_input("To Location", placeholder="OTT19001")
+        to_location = st.text_input("To Location", placeholder="Type/Scan the location")
 
 # Input Method Selection
 st.header("📱 Add Parts")
@@ -260,7 +260,7 @@ elif st.session_state.scanning_mode == "manual":
         with st.form(key='manual_form', clear_on_submit=True, border=False):
             manual_code = st.text_input(
                 "Enter/Scan part number", 
-                placeholder="Type or scan part number then press Enter",
+                placeholder="Type or scan part number",
                 help="Use keyboard or physical scanner",
                 label_visibility="collapsed"
             )
