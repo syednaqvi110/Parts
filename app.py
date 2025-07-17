@@ -57,12 +57,6 @@ def add_part(barcode, from_scanner=False):
             part['quantity'] += 1
             if from_scanner:
                 st.success(f"🎯 Item: {barcode} scanned (Total qty: {part['quantity']})")
-                # Trigger vibration
-                st.markdown("""
-                <script>
-                if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
-                </script>
-                """, unsafe_allow_html=True)
             else:
                 st.success(f"✅ Updated: {barcode} (qty: {part['quantity']})")
             return True
@@ -76,12 +70,6 @@ def add_part(barcode, from_scanner=False):
     
     if from_scanner:
         st.success(f"🎯 Item: {barcode} scanned (Total qty: 1)")
-        # Trigger vibration
-        st.markdown("""
-        <script>
-        if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
-        </script>
-        """, unsafe_allow_html=True)
     else:
         st.success(f"✅ Added: {barcode}")
     return True
@@ -161,6 +149,13 @@ st.markdown("""
     input[type="text"] {
         font-size: 16px !important;
     }
+    .qr-scanner-container {
+        text-align: center;
+        padding: 20px;
+        border: 3px dashed #2196F3;
+        border-radius: 10px;
+        margin: 10px 0;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -185,8 +180,8 @@ with st.container():
     col1, col2 = st.columns(2)
     
     with col1:
-        if st.button("📷 Camera Photo", type="primary" if st.session_state.scanning_mode == "camera" else "secondary"):
-            st.session_state.scanning_mode = "camera"
+        if st.button("📷 QR Scanner", type="primary" if st.session_state.scanning_mode == "qr_scanner" else "secondary"):
+            st.session_state.scanning_mode = "qr_scanner"
             st.rerun()
     
     with col2:
@@ -196,35 +191,132 @@ with st.container():
     
     st.markdown('</div>', unsafe_allow_html=True)
 
-# Camera Photo Section - SIMPLE AND RELIABLE
-if st.session_state.scanning_mode == "camera":
+# QR Scanner Section - REAL-TIME SCANNING
+if st.session_state.scanning_mode == "qr_scanner":
     with st.container():
         st.markdown('<div class="scanning-section scanner-active">', unsafe_allow_html=True)
         
-        st.info("📱 **Camera Ready** - Take photo of QR code/barcode")
+        st.info("📱 **QR Scanner Active** - Point camera at QR codes")
         
-        # Built-in Streamlit camera
-        camera_photo = st.camera_input("Take a photo of the QR code or barcode")
-        
-        if camera_photo is not None:
-            st.image(camera_photo, caption="Barcode Photo", use_column_width=True)
-            st.info("👆 Type the code from this photo below")
+        # QR Scanner component
+        try:
+            from streamlit_qrcode_scanner import qrcode_scanner
             
-            # Manual entry for the photographed code
-            with st.form(key='camera_form', clear_on_submit=True):
-                photo_code = st.text_input(
-                    "Enter the code from the photo", 
-                    placeholder="Type the code you see in the photo"
-                )
-                
-                if st.form_submit_button("Add This Part", type="primary"):
-                    if photo_code and add_part(photo_code, from_scanner=True):
-                        st.rerun()
+            # Create QR scanner
+            qr_code = qrcode_scanner(
+                key="qr_scanner",
+                height=400,
+                width=400,
+                title="QR Code Scanner",
+                subtitle="Position QR code within the frame"
+            )
+            
+            # Process scanned code
+            if qr_code:
+                if add_part(qr_code, from_scanner=True):
+                    # Trigger haptic feedback if available
+                    st.markdown("""
+                    <script>
+                    if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+                    </script>
+                    """, unsafe_allow_html=True)
+                    
+                    # Brief success message
+                    time.sleep(0.5)
+                    st.rerun()
         
-        # Option to close camera
-        if st.button("❌ Close Camera", key="close_camera"):
-            st.session_state.scanning_mode = None
-            st.rerun()
+        except ImportError:
+            # Fallback: HTML5 QR Scanner
+            st.markdown("""
+            <div class="qr-scanner-container">
+                <div id="qr-reader" style="width: 100%; max-width: 500px; margin: 0 auto;"></div>
+                <p style="margin-top: 10px; color: #666;">
+                    📱 Allow camera access to scan QR codes
+                </p>
+            </div>
+            
+            <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+            <script>
+                function startScanner() {
+                    const html5QrCode = new Html5Qrcode("qr-reader");
+                    
+                    const qrCodeSuccessCallback = (decodedText, decodedResult) => {
+                        // Send scanned code to Streamlit
+                        window.parent.postMessage({
+                            type: 'qr_scanned',
+                            data: decodedText
+                        }, '*');
+                    };
+                    
+                    const config = { 
+                        fps: 10, 
+                        qrbox: { width: 250, height: 250 },
+                        aspectRatio: 1.0
+                    };
+                    
+                    html5QrCode.start(
+                        { facingMode: "environment" }, 
+                        config, 
+                        qrCodeSuccessCallback
+                    ).catch(err => {
+                        console.error("QR Scanner error:", err);
+                        document.getElementById("qr-reader").innerHTML = 
+                            "<p>❌ Camera access denied or not available</p>";
+                    });
+                }
+                
+                // Start scanner when page loads
+                setTimeout(startScanner, 1000);
+            </script>
+            """, unsafe_allow_html=True)
+            
+            # Listen for scanned codes
+            st.markdown("""
+            <script>
+                window.addEventListener('message', function(event) {
+                    if (event.data.type === 'qr_scanned') {
+                        // Add the scanned code to session state
+                        const scannedCode = event.data.data;
+                        console.log('QR Code scanned:', scannedCode);
+                        
+                        // Trigger Streamlit rerun with the scanned code
+                        const inputs = document.querySelectorAll('input[type="text"]');
+                        for (let input of inputs) {
+                            if (input.placeholder && input.placeholder.includes('scan result')) {
+                                input.value = scannedCode;
+                                input.dispatchEvent(new Event('input', { bubbles: true }));
+                                break;
+                            }
+                        }
+                    }
+                });
+            </script>
+            """, unsafe_allow_html=True)
+            
+            # Hidden input to capture scanned results
+            scanned_code = st.text_input(
+                "Scanned code will appear here",
+                placeholder="Waiting for scan result...",
+                key="scanned_result",
+                label_visibility="hidden"
+            )
+            
+            if scanned_code:
+                if add_part(scanned_code, from_scanner=True):
+                    # Clear the input and continue scanning
+                    st.session_state.scanned_result = ""
+                    st.rerun()
+        
+        # Scanner controls
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🔄 Restart Scanner", key="restart_scanner"):
+                st.rerun()
+        
+        with col2:
+            if st.button("❌ Close Scanner", key="close_scanner"):
+                st.session_state.scanning_mode = None
+                st.rerun()
         
         st.markdown('</div>', unsafe_allow_html=True)
 
