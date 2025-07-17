@@ -198,13 +198,37 @@ if st.session_state.scanning_mode == "qr_scanner":
         
         st.info("📱 **QR Scanner Active** - Point camera at QR codes")
         
+# QR Scanner Section - REAL-TIME SCANNING
+if st.session_state.scanning_mode == "qr_scanner":
+    with st.container():
+        st.markdown('<div class="scanning-section scanner-active">', unsafe_allow_html=True)
+        
+        st.info("📱 **QR Scanner Mode** - Click 'Start Camera' to begin")
+        
+        # Add a manual start button
+        if st.button("📷 Start Camera", key="start_camera_btn", type="primary"):
+            st.markdown("""
+            <script>
+                // Force start the camera with user interaction
+                if (window.startQRScanner) {
+                    window.startQRScanner();
+                } else {
+                    // Fallback - trigger camera start
+                    setTimeout(function() {
+                        if (window.startQRScanner) {
+                            window.startQRScanner();
+                        }
+                    }, 500);
+                }
+            </script>
+            """, unsafe_allow_html=True)
+        
         # HTML5 QR Scanner - Direct implementation
         st.markdown("""
         <div class="qr-scanner-container">
             <div id="qr-reader" style="width: 100%; max-width: 500px; margin: 0 auto; min-height: 300px; display: flex; align-items: center; justify-content: center;">
                 <div id="loading-message" style="text-align: center; color: #666;">
-                    📱 Requesting camera access...<br>
-                    <small>Please allow camera permission when prompted</small>
+                    👆 Click "Start Camera" button above to begin scanning
                 </div>
             </div>
         </div>
@@ -223,75 +247,124 @@ if st.session_state.scanning_mode == "qr_scanner":
                 }
             }
             
-            function startScanner() {
-                if (isScanning || scannerStarted) return;
+            function startQRScanner() {
+                if (isScanning || scannerStarted) {
+                    console.log("Scanner already running");
+                    return;
+                }
                 
-                console.log("Initializing QR Scanner...");
-                updateStatus("🔄 Initializing camera...");
+                console.log("Starting QR Scanner with user interaction...");
+                updateStatus("🔄 Requesting camera permission...");
                 
-                html5QrCode = new Html5Qrcode("qr-reader");
-                
-                const qrCodeSuccessCallback = (decodedText, decodedResult) => {
-                    console.log('QR Code scanned:', decodedText);
+                // Request camera permission explicitly
+                navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        facingMode: "environment",
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    } 
+                })
+                .then(function(stream) {
+                    console.log("Camera permission granted");
+                    updateStatus("✅ Camera access granted. Starting scanner...");
                     
-                    // Add scanned code to hidden input
-                    const hiddenInput = document.getElementById('scanned_code_input');
-                    if (hiddenInput) {
-                        hiddenInput.value = decodedText;
-                        hiddenInput.dispatchEvent(new Event('input', { bubbles: true }));
+                    // Stop the test stream
+                    stream.getTracks().forEach(track => track.stop());
+                    
+                    // Initialize the QR scanner
+                    html5QrCode = new Html5Qrcode("qr-reader");
+                    
+                    const qrCodeSuccessCallback = (decodedText, decodedResult) => {
+                        console.log('QR Code scanned:', decodedText);
                         
-                        // Brief success feedback
-                        updateStatus("✅ Code scanned: " + decodedText.substring(0, 20) + "...");
-                        setTimeout(() => {
-                            updateStatus("📱 Scanner active - Point camera at QR codes");
-                        }, 1500);
+                        // Add scanned code to hidden input
+                        const hiddenInput = document.getElementById('scanned_code_input');
+                        if (hiddenInput) {
+                            hiddenInput.value = decodedText;
+                            hiddenInput.dispatchEvent(new Event('input', { bubbles: true }));
+                            
+                            // Brief success feedback
+                            updateStatus("✅ Code scanned: " + decodedText.substring(0, 20) + "...");
+                            setTimeout(() => {
+                                updateStatus("📱 Scanner active - Point camera at QR codes");
+                            }, 1500);
+                        }
+                        
+                        // Trigger vibration if available
+                        if (navigator.vibrate) {
+                            navigator.vibrate([200, 100, 200]);
+                        }
+                    };
+                    
+                    const config = { 
+                        fps: 10, 
+                        qrbox: { width: 250, height: 250 },
+                        aspectRatio: 1.0,
+                        disableFlip: false
+                    };
+                    
+                    // Start the actual QR scanner
+                    html5QrCode.start(
+                        { facingMode: "environment" }, 
+                        config, 
+                        qrCodeSuccessCallback
+                    ).then(() => {
+                        isScanning = true;
+                        scannerStarted = true;
+                        updateStatus("📱 Scanner active - Point camera at QR codes");
+                        console.log("QR Scanner started successfully");
+                    }).catch(err => {
+                        console.error("QR Scanner start error:", err);
+                        updateStatus("❌ Scanner failed to start: " + err.message, true);
+                    });
+                })
+                .catch(function(err) {
+                    console.error("Camera permission error:", err);
+                    let errorMsg = "❌ Camera access required<br>";
+                    
+                    if (err.name === 'NotAllowedError') {
+                        errorMsg += "Camera permission was denied. Please:<br>";
+                        errorMsg += "1. Click the camera icon in your browser's address bar<br>";
+                        errorMsg += "2. Select 'Allow' for camera access<br>";
+                        errorMsg += "3. Refresh the page and try again";
+                    } else if (err.name === 'NotFoundError') {
+                        errorMsg += "No camera found on this device";
+                    } else if (err.name === 'NotSupportedError') {
+                        errorMsg += "Camera not supported in this browser";
+                    } else {
+                        errorMsg += "Error: " + err.message;
                     }
                     
-                    // Trigger vibration if available
-                    if (navigator.vibrate) {
-                        navigator.vibrate([200, 100, 200]);
-                    }
-                };
-                
-                const config = { 
-                    fps: 10, 
-                    qrbox: { width: 250, height: 250 },
-                    aspectRatio: 1.0,
-                    disableFlip: false
-                };
-                
-                // First check for camera permissions
-                navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
-                    .then(function(stream) {
-                        // Permission granted, stop the test stream
-                        stream.getTracks().forEach(track => track.stop());
-                        
-                        // Now start the actual QR scanner
-                        updateStatus("📱 Starting QR scanner...");
-                        
-                        html5QrCode.start(
-                            { facingMode: "environment" }, 
-                            config, 
-                            qrCodeSuccessCallback
-                        ).then(() => {
-                            isScanning = true;
-                            scannerStarted = true;
-                            updateStatus("📱 Scanner active - Point camera at QR codes");
-                            console.log("QR Scanner started successfully");
-                        }).catch(err => {
-                            console.error("QR Scanner start error:", err);
-                            updateStatus("❌ Scanner failed to start: " + err.message, true);
-                        });
-                    })
-                    .catch(function(err) {
-                        console.error("Camera permission error:", err);
-                        let errorMsg = "❌ Camera access required<br>";
-                        
-                        if (err.name === 'NotAllowedError') {
-                            errorMsg += "Please allow camera access and click 'Restart Scanner'";
-                        } else if (err.name === 'NotFoundError') {
-                            errorMsg += "No camera found on this device";
-                        } else if (err.name === 'NotSupportedError') {
+                    updateStatus(errorMsg, true);
+                });
+            }
+            
+            function stopQRScanner() {
+                if (html5QrCode && isScanning) {
+                    html5QrCode.stop().then(() => {
+                        isScanning = false;
+                        scannerStarted = false;
+                        console.log("QR Scanner stopped");
+                        updateStatus("Scanner stopped");
+                    }).catch(err => {
+                        console.error("Error stopping scanner:", err);
+                    });
+                }
+            }
+            
+            // Expose functions globally
+            window.startQRScanner = startQRScanner;
+            window.stopQRScanner = stopQRScanner;
+            
+            window.restartQRScanner = function() {
+                stopQRScanner();
+                setTimeout(startQRScanner, 1000);
+            };
+            
+            // Stop scanner when page unloads
+            window.addEventListener('beforeunload', stopQRScanner);
+        </script>
+        """, unsafe_allow_html=True).name === 'NotSupportedError') {
                             errorMsg += "Camera not supported in this browser";
                         } else {
                             errorMsg += "Error: " + err.message;
