@@ -26,6 +26,8 @@ if 'last_scanned_code' not in st.session_state:
     st.session_state.last_scanned_code = ""
 if 'last_scan_time' not in st.session_state:
     st.session_state.last_scan_time = 0
+if 'closing_scanner' not in st.session_state:
+    st.session_state.closing_scanner = False
 
 # Scan cooldown to prevent rapid duplicate scans
 SCAN_COOLDOWN = 1.5  # 1.5 seconds between same codes
@@ -116,6 +118,7 @@ def reset_transfer():
     st.session_state.scanning_mode = None
     st.session_state.last_scanned_code = ""
     st.session_state.last_scan_time = 0
+    st.session_state.closing_scanner = False
 
 # CSS for better UI
 st.markdown("""
@@ -197,8 +200,8 @@ if st.session_state.scanning_mode == "qr_scanner":
             # This is the working QR scanner that continuously scans
             qr_code = qrcode_scanner(key='qrcode_scanner')
             
-            # Process scanned code immediately
-            if qr_code:
+            # Process scanned code immediately - but only if we're not closing the scanner
+            if qr_code and not st.session_state.closing_scanner:
                 if add_part(qr_code, from_scanner=True):
                     st.rerun()
                     
@@ -208,11 +211,15 @@ if st.session_state.scanning_mode == "qr_scanner":
         
         # Option to close scanner
         if st.button("❌ Close Scanner", key="close_scanner"):
+            # Set flag to prevent processing any pending scans
+            st.session_state.closing_scanner = True
             # Clear any pending scanner state to prevent duplicate processing
             st.session_state.scanning_mode = None
             # Force a clean state by clearing the scanner key
             if 'qrcode_scanner' in st.session_state:
                 del st.session_state['qrcode_scanner']
+            # Reset the closing flag for next time
+            st.session_state.closing_scanner = False
             st.rerun()
         
         st.markdown('</div>', unsafe_allow_html=True)
