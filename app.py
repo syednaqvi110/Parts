@@ -185,8 +185,8 @@ with st.container():
     col1, col2 = st.columns(2)
     
     with col1:
-        if st.button("📷 Scan QR Code", type="primary" if st.session_state.scanning_mode == "qr" else "secondary"):
-            st.session_state.scanning_mode = "qr"
+        if st.button("📷 Camera Photo", type="primary" if st.session_state.scanning_mode == "camera" else "secondary"):
+            st.session_state.scanning_mode = "camera"
             st.rerun()
     
     with col2:
@@ -196,29 +196,33 @@ with st.container():
     
     st.markdown('</div>', unsafe_allow_html=True)
 
-# QR Code Scanning Section - SIMPLIFIED
-if st.session_state.scanning_mode == "qr":
+# Camera Photo Section - SIMPLE AND RELIABLE
+if st.session_state.scanning_mode == "camera":
     with st.container():
         st.markdown('<div class="scanning-section scanner-active">', unsafe_allow_html=True)
         
-        st.info("📱 **QR Scanner Active** - Point camera at QR code")
+        st.info("📱 **Camera Ready** - Take photo of QR code/barcode")
         
-        # Import and use the better barcode scanner
-        try:
-            from streamlit_barcode_scanner import qr_scanner
-            
-            # Simple scanner call - handles everything automatically
-            scanned_code = qr_scanner(key="barcode_scanner")
-            
-            if scanned_code:
-                if add_part(scanned_code, from_scanner=True):
-                    st.rerun()
-                    
-        except ImportError:
-            st.error("Barcode scanner not available. Please use manual entry.")
+        # Built-in Streamlit camera
+        camera_photo = st.camera_input("Take a photo of the QR code or barcode")
         
-        # Option to close scanner
-        if st.button("❌ Close Scanner", key="close_scanner"):
+        if camera_photo is not None:
+            st.image(camera_photo, caption="Barcode Photo", use_column_width=True)
+            st.info("👆 Type the code from this photo below")
+            
+            # Manual entry for the photographed code
+            with st.form(key='camera_form', clear_on_submit=True):
+                photo_code = st.text_input(
+                    "Enter the code from the photo", 
+                    placeholder="Type the code you see in the photo"
+                )
+                
+                if st.form_submit_button("Add This Part", type="primary"):
+                    if photo_code and add_part(photo_code, from_scanner=True):
+                        st.rerun()
+        
+        # Option to close camera
+        if st.button("❌ Close Camera", key="close_camera"):
             st.session_state.scanning_mode = None
             st.rerun()
         
