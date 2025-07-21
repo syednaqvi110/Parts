@@ -294,34 +294,27 @@ elif st.session_state.scanning_mode == "manual":
         
         st.info("⌨️ **Manual Entry Mode** - Type part number and press Enter")
         
-        # Use form to enable Enter key functionality
-        with st.form(key='manual_form', clear_on_submit=True, border=False):
-            manual_code = st.text_input(
-                "Part Number", 
-                placeholder="Type or scan part number here",
-                label_visibility="collapsed"
-            )
-            
-            # Submit button for Enter key (but hide it with CSS)
-            submitted = st.form_submit_button("Add Part")
-            
-            if submitted and manual_code:
-                if add_part(manual_code, from_scanner=False):
+        # Use text_input with on_change callback instead of forms
+        def handle_manual_input():
+            if st.session_state.manual_input_field:
+                if add_part(st.session_state.manual_input_field, from_scanner=False):
+                    st.session_state.manual_input_field = ""  # Clear input
                     st.rerun()
         
-        # Close button outside the form
+        manual_code = st.text_input(
+            "Part Number", 
+            placeholder="Type or scan part number here",
+            label_visibility="collapsed",
+            key="manual_input_field",
+            on_change=handle_manual_input
+        )
+        
+        # Close button
         if st.button("❌ Close Manual Entry", key="close_manual"):
             st.session_state.scanning_mode = None
+            if 'manual_input_field' in st.session_state:
+                del st.session_state.manual_input_field
             st.rerun()
-        
-        # CSS to hide the submit button
-        st.markdown("""
-        <style>
-        .stForm button[kind="primaryFormSubmit"] {
-            display: none;
-        }
-        </style>
-        """, unsafe_allow_html=True)
         
         st.markdown('</div>', unsafe_allow_html=True)
 
