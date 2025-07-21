@@ -211,9 +211,11 @@ st.title("📦 Parts Transfer")
 with st.container():
     col1, col2 = st.columns(2)
     with col1:
-        from_location = st.text_input("From Location", placeholder="Type/Scan the location").strip()
+        from_location_raw = st.text_input("From Location", placeholder="Type/Scan the location")
+        from_location = from_location_raw.strip() if from_location_raw else ""
     with col2:
-        to_location = st.text_input("To Location", placeholder="Type/Scan the location").strip()
+        to_location_raw = st.text_input("To Location", placeholder="Type/Scan the location")
+        to_location = to_location_raw.strip() if to_location_raw else ""
 
 # Input Method Selection
 st.header("📱 Add Parts")
@@ -278,27 +280,31 @@ elif st.session_state.scanning_mode == "manual":
     with st.container():
         st.markdown('<div class="scanning-section">', unsafe_allow_html=True)
         
-        st.info("⌨️ **Manual Entry Mode** - Enter part numbers")
+        st.info("⌨️ **Manual Entry Mode** - Enter part numbers below")
         
-        # Form for Enter key support - NO BORDER to remove blue bar
-        with st.form(key='manual_form', clear_on_submit=True, border=False):
-            manual_code = st.text_input(
-                "Enter part number", 
-                placeholder="Type or scan part number here",
-                help="Type the part number and press Enter",
-                label_visibility="visible"
-            )
-            
-            submitted = st.form_submit_button("Add Part", type="primary", use_container_width=True)
-            
-            if submitted and manual_code:
-                if add_part(manual_code, from_scanner=False):
-                    st.rerun()
+        # Direct input without form to avoid blue bar
+        manual_code = st.text_input(
+            "Enter part number", 
+            placeholder="Type or scan part number here and press Enter",
+            key="manual_input",
+            on_change=None
+        )
         
-        # Option to close manual entry
-        if st.button("❌ Close Manual Entry", key="close_manual"):
-            st.session_state.scanning_mode = None
-            st.rerun()
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            if st.button("Add Part", type="primary", use_container_width=True):
+                if manual_code:
+                    if add_part(manual_code, from_scanner=False):
+                        # Clear the input by changing its key
+                        if 'manual_input_counter' not in st.session_state:
+                            st.session_state.manual_input_counter = 0
+                        st.session_state.manual_input_counter += 1
+                        st.rerun()
+        
+        with col2:
+            if st.button("❌ Close", key="close_manual"):
+                st.session_state.scanning_mode = None
+                st.rerun()
         
         st.markdown('</div>', unsafe_allow_html=True)
 
