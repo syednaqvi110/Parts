@@ -304,87 +304,25 @@ elif st.session_state.scanning_mode == "manual":
         
         st.info("⌨️ **Manual Entry Mode** - Type part number and press Enter")
         
-        # NO FORM - Direct text input with JavaScript Enter key handler
-        manual_code = st.text_input(
-            "Part Number", 
-            placeholder="Type or scan part number here and press Enter",
-            label_visibility="collapsed",
-            key="manual_entry_input"
-        )
-        
-        # JavaScript to handle Enter key WITHOUT forms
-        st.markdown(f"""
-        <script>
-        function setupEnterHandler_{st.session_state.get('entry_counter', 0)}() {{
-            // Find the text input for manual entry
-            const textInputs = document.querySelectorAll('input[type="text"]');
-            let targetInput = null;
+        # Simple form - the CSS above should hide any borders now
+        with st.form(key='manual_form', clear_on_submit=True):
+            manual_code = st.text_input(
+                "", 
+                placeholder="Type or scan part number here and press Enter",
+                label_visibility="collapsed"
+            )
             
-            // Find the input with our placeholder text
-            for (let input of textInputs) {{
-                if (input.placeholder && input.placeholder.includes('Type or scan part number')) {{
-                    targetInput = input;
-                    break;
-                }}
-            }}
+            # The submit button - form needs this for Enter key to work
+            submitted = st.form_submit_button("Add Part", use_container_width=True)
             
-            if (targetInput) {{
-                // Remove any existing listeners
-                targetInput.removeEventListener('keydown', handleEnterKey);
-                
-                // Add new Enter key handler
-                targetInput.addEventListener('keydown', handleEnterKey);
-                console.log('Enter key handler attached to input');
-            }} else {{
-                console.log('Could not find target input');
-            }}
-        }}
+            if submitted and manual_code and manual_code.strip():
+                if add_part(manual_code.strip(), from_scanner=False):
+                    st.rerun()
         
-        function handleEnterKey(event) {{
-            if (event.key === 'Enter' && event.target.value.trim()) {{
-                console.log('Enter pressed with value:', event.target.value);
-                
-                // Find the Add Part button and click it
-                const buttons = document.querySelectorAll('button');
-                for (let button of buttons) {{
-                    if (button.textContent.includes('Add Part')) {{
-                        console.log('Clicking Add Part button');
-                        button.click();
-                        return;
-                    }}
-                }}
-                console.log('Add Part button not found');
-            }}
-        }}
-        
-        // Setup the handler multiple times to ensure it catches the input
-        setTimeout(() => setupEnterHandler_{st.session_state.get('entry_counter', 0)}(), 100);
-        setTimeout(() => setupEnterHandler_{st.session_state.get('entry_counter', 0)}(), 500);
-        setTimeout(() => setupEnterHandler_{st.session_state.get('entry_counter', 0)}(), 1000);
-        </script>
-        """, unsafe_allow_html=True)
-        
-        # Regular buttons - no forms involved
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            if st.button("Add Part", type="primary", use_container_width=True, key="add_part_btn"):
-                if manual_code and manual_code.strip():
-                    if add_part(manual_code.strip(), from_scanner=False):
-                        # Clear input by resetting the key
-                        if 'entry_counter' not in st.session_state:
-                            st.session_state.entry_counter = 0
-                        st.session_state.entry_counter += 1
-                        st.rerun()
-        
-        with col2:
-            if st.button("❌ Close", key="close_manual"):
-                st.session_state.scanning_mode = None
-                # Clean up
-                if 'manual_entry_input' in st.session_state:
-                    del st.session_state.manual_entry_input
-                if 'entry_counter' in st.session_state:
-                    del st.session_state.entry_counter
-                st.rerun()
+        # Close button outside the form
+        if st.button("❌ Close Manual Entry", key="close_manual"):
+            st.session_state.scanning_mode = None
+            st.rerun()
         
         st.markdown('</div>', unsafe_allow_html=True)
 
