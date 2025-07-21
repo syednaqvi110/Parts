@@ -33,10 +33,6 @@ if 'scanner_key' not in st.session_state:
     st.session_state.scanner_key = 0
 if 'last_processed_code' not in st.session_state:
     st.session_state.last_processed_code = ""
-if 'show_review' not in st.session_state:
-    st.session_state.show_review = False
-if 'completed_transfer' not in st.session_state:
-    st.session_state.completed_transfer = None
 
 # Scan cooldown to prevent rapid duplicate scans
 SCAN_COOLDOWN = 1.5  # 1.5 seconds between same codes
@@ -129,8 +125,6 @@ def reset_transfer():
     st.session_state.last_scan_time = 0
     st.session_state.scanner_key = 0
     st.session_state.last_processed_code = ""
-    st.session_state.show_review = False
-    st.session_state.completed_transfer = None
 
 def generate_transfer_id():
     """Generate unique transfer ID"""
@@ -211,147 +205,15 @@ st.markdown("""
 # Main App
 st.title("📦 Parts Transfer")
 
-# POST-TRANSFER RECEIPT SCREEN
-if st.session_state.completed_transfer:
-    st.markdown('<div class="receipt-section">', unsafe_allow_html=True)
-    
-    st.success("✅ **TRANSFER COMPLETED SUCCESSFULLY!**")
-    st.balloons()
-    
-    transfer_data = st.session_state.completed_transfer
-    
-    # Receipt Header
-    st.header("🧾 Transfer Receipt")
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        st.write(f"**Transfer ID:** {transfer_data['transfer_id']}")
-        st.write(f"**Date/Time:** {transfer_data['timestamp']}")
-    with col2:
-        st.write(f"**From:** {transfer_data['from_location']}")
-        st.write(f"**To:** {transfer_data['to_location']}")
-    
-    st.divider()
-    
-    # Transfer Summary
-    total_items = sum(p['quantity'] for p in transfer_data['parts'])
-    st.info(f"📊 **{total_items} total items transferred** • **{len(transfer_data['parts'])} different parts**")
-    
-    # Items with verification checkboxes
-    st.subheader("📦 Items Transferred - Physical Verification:")
-    
-    for i, part in enumerate(transfer_data['parts']):
-        col1, col2, col3 = st.columns([1, 6, 2])
-        with col1:
-            st.checkbox("", value=False, key=f"verify_{i}", help="Check after physical verification")
-        with col2:
-            st.write(f"**{part['barcode']}**")
-        with col3:
-            st.write(f"Qty: **{part['quantity']}**")
-    
-    st.divider()
-    
-    # Download transfer document
-    doc_content = generate_transfer_document(
-        transfer_data['transfer_id'],
-        transfer_data['from_location'],
-        transfer_data['to_location'],
-        transfer_data['parts']
-    )
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        st.download_button(
-            label="📄 Download Transfer Document",
-            data=doc_content,
-            file_name=f"transfer_{transfer_data['transfer_id']}.txt",
-            mime="text/plain",
-            type="secondary"
-        )
-    
-    with col2:
-        if st.button("🔄 Start New Transfer", type="primary"):
-            reset_transfer()
-            st.rerun()
-    
-    st.markdown('</div>', unsafe_allow_html=True)
-    
-    # Stop here - don't show the rest of the app
-    st.stop()
-
-# PRE-TRANSFER REVIEW SCREEN
-elif st.session_state.show_review:
-    # Get current form data
-    from_location = st.session_state.get('from_location_review', '')
-    to_location = st.session_state.get('to_location_review', '')
-    
-    st.markdown('<div class="review-section">', unsafe_allow_html=True)
-    
-    st.warning("⚠️ **PLEASE REVIEW TRANSFER DETAILS BEFORE PROCEEDING**")
-    st.header("📋 Transfer Summary")
-    
-    # Location summary
-    col1, col2 = st.columns(2)
-    with col1:
-        st.info(f"**FROM LOCATION:**\n{from_location}")
-    with col2:
-        st.info(f"**TO LOCATION:**\n{to_location}")
-    
-    # Parts summary
-    total_items = sum(p['quantity'] for p in st.session_state.parts)
-    st.success(f"📊 **{total_items} total items** • **{len(st.session_state.parts)} different parts**")
-    
-    st.subheader("📦 Items to Transfer:")
-    
-    # Show all parts in a clean format
-    for i, part in enumerate(st.session_state.parts, 1):
-        st.write(f"{i:2d}. **{part['barcode']}** - Quantity: **{part['quantity']}**")
-    
-    st.divider()
-    
-    # Confirmation buttons
-    st.warning("🔍 **Please double-check all details above are correct**")
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("❌ Cancel - Let Me Check", type="secondary"):
-            st.session_state.show_review = False
-            st.rerun()
-    
-    with col2:
-        if st.button("✅ CONFIRM TRANSFER", type="primary"):
-            # Actually execute the transfer
-            parts_data = [{'barcode': p['barcode'], 'quantity': p['quantity']} for p in st.session_state.parts]
-            
-            if save_transfer_data(from_location, to_location, parts_data):
-                # Store completed transfer data for receipt
-                transfer_id = generate_transfer_id()
-                st.session_state.completed_transfer = {
-                    'transfer_id': transfer_id,
-                    'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                    'from_location': from_location,
-                    'to_location': to_location,
-                    'parts': parts_data
-                }
-                st.session_state.show_review = False
-                st.rerun()
-            else:
-                st.error("Transfer failed - please try again")
-    
-    st.markdown('</div>', unsafe_allow_html=True)
-    
-    # Stop here - don't show the rest of the app
-    st.stop()
-
-# MAIN APP INTERFACE (when not in review or receipt mode)
+# MAIN APP INTERFACE
 
 # Transfer Details Section
 with st.container():
     col1, col2 = st.columns(2)
     with col1:
-        from_location = st.text_input("From Location", placeholder="Type/Scan the location")
+        from_location = st.text_input("From Location", placeholder="Type/Scan the location").strip()
     with col2:
-        to_location = st.text_input("To Location", placeholder="Type/Scan the location")
+        to_location = st.text_input("To Location", placeholder="Type/Scan the location").strip()
 
 # Input Method Selection
 st.header("📱 Add Parts")
@@ -418,13 +280,13 @@ elif st.session_state.scanning_mode == "manual":
         
         st.info("⌨️ **Manual Entry Mode** - Enter part numbers")
         
-        # Form for Enter key support
+        # Form for Enter key support - NO BORDER to remove blue bar
         with st.form(key='manual_form', clear_on_submit=True, border=False):
             manual_code = st.text_input(
-                "Enter/Scan part number", 
-                placeholder="Type or scan part number",
-                help="Use keyboard or physical scanner",
-                label_visibility="collapsed"
+                "Enter part number", 
+                placeholder="Type or scan part number here",
+                help="Type the part number and press Enter",
+                label_visibility="visible"
             )
             
             submitted = st.form_submit_button("Add Part", type="primary", use_container_width=True)
@@ -487,24 +349,55 @@ if st.session_state.parts:
 else:
     st.info("No parts added yet - select a method above to start")
 
-# Complete Transfer Section (now shows Review button)
-st.header("🔍 Review Transfer")
+# Complete Transfer Section
+st.header("✅ Complete Transfer")
 
-can_proceed = (
+can_complete = (
     from_location and 
     to_location and 
-    st.session_state.parts
+    st.session_state.parts and 
+    not st.session_state.transfer_complete
 )
 
-if can_proceed:
-    if st.button("🔍 Review Transfer", type="primary"):
-        # Store locations for review screen
-        st.session_state.from_location_review = from_location
-        st.session_state.to_location_review = to_location
-        st.session_state.show_review = True
-        st.rerun()
+if can_complete:
+    # Show transfer summary before completing
+    st.subheader("📋 Transfer Summary")
     
-    st.info("👆 Click 'Review Transfer' to see confirmation screen before completing")
+    # Location summary
+    col1, col2 = st.columns(2)
+    with col1:
+        st.info(f"**FROM:** {from_location}")
+    with col2:
+        st.info(f"**TO:** {to_location}")
+    
+    # Parts summary
+    total_items = sum(p['quantity'] for p in st.session_state.parts)
+    st.success(f"📊 **{total_items} total items** • **{len(st.session_state.parts)} different parts**")
+    
+    # Show parts list
+    with st.expander("📦 View all items to transfer", expanded=True):
+        for i, part in enumerate(st.session_state.parts, 1):
+            st.write(f"{i}. **{part['barcode']}** - Qty: {part['quantity']}")
+    
+    st.warning("⚠️ **Please verify the above information is correct**")
+    
+    if st.button("🚀 Complete Transfer", type="primary"):
+        parts_data = [{'barcode': p['barcode'], 'quantity': p['quantity']} for p in st.session_state.parts]
+        
+        if save_transfer_data(from_location, to_location, parts_data):
+            st.success(f"✅ **Transfer Completed!** {sum(p['quantity'] for p in st.session_state.parts)} items transferred")
+            st.balloons()
+            
+            # Show completed transfer summary
+            st.subheader("🧾 Transfer Receipt")
+            st.write(f"**Transfer ID:** TXN-{datetime.now().strftime('%Y%m%d%H%M%S')}")
+            st.write(f"**From:** {from_location} **→ To:** {to_location}")
+            st.write(f"**Total Items:** {total_items}")
+            st.write(f"**Completed:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            
+            # Auto-reset for new transfer
+            reset_transfer()
+            st.rerun()
 else:
     # Show what's missing
     missing = []
@@ -517,12 +410,6 @@ else:
     
     if missing:
         st.warning(f"⚠️ **Required:** {', '.join(missing)}")
-
-# Debug info (remove this later)
-st.sidebar.write("**Debug Info:**")
-st.sidebar.write(f"show_review: {st.session_state.show_review}")
-st.sidebar.write(f"completed_transfer: {st.session_state.completed_transfer is not None}")
-st.sidebar.write(f"parts count: {len(st.session_state.parts)}")
 
 # Emergency reset button
 if st.session_state.parts:
