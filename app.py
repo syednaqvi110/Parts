@@ -308,7 +308,7 @@ elif st.session_state.scanning_mode == "manual":
         with st.form(key='manual_form', clear_on_submit=True):
             manual_code = st.text_input(
                 "", 
-                placeholder="Enter part number here",
+                placeholder="dummy prompt",
                 label_visibility="collapsed"
             )
             
