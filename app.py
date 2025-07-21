@@ -268,25 +268,70 @@ elif st.session_state.scanning_mode == "manual":
         
         st.info("⌨️ **Manual Entry Mode** - Type part number and press Enter")
         
-        # Use form with border=False to completely remove borders
-        with st.form(key='manual_form', clear_on_submit=True, border=False):
-            manual_code = st.text_input(
-                "Part Number", 
-                placeholder="Type or scan part number here",
-                label_visibility="collapsed"
-            )
-            
-            # Submit button for Enter key functionality
-            submitted = st.form_submit_button("Add Part")
-            
-            if submitted and manual_code:
-                if add_part(manual_code, from_scanner=False):
-                    st.rerun()
+        # NO FORM - Direct text input with JavaScript Enter key handler
+        manual_code = st.text_input(
+            "Part Number", 
+            placeholder="Type or scan part number here and press Enter",
+            label_visibility="collapsed",
+            key="manual_entry_input"
+        )
         
-        # Close button outside the form
-        if st.button("❌ Close Manual Entry", key="close_manual"):
-            st.session_state.scanning_mode = None
-            st.rerun()
+        # JavaScript to handle Enter key WITHOUT forms
+        st.markdown("""
+        <script>
+        function setupEnterHandler() {
+            // Find the text input
+            const inputs = document.querySelectorAll('input[aria-label="Part Number"]');
+            if (inputs.length > 0) {
+                const input = inputs[inputs.length - 1]; // Get the latest one
+                
+                // Remove any existing listeners
+                input.removeEventListener('keydown', handleEnter);
+                
+                // Add Enter key handler
+                input.addEventListener('keydown', handleEnter);
+            }
+        }
+        
+        function handleEnter(event) {
+            if (event.key === 'Enter' && event.target.value.trim()) {
+                // Find and click the Add Part button
+                const buttons = document.querySelectorAll('button');
+                for (let button of buttons) {
+                    if (button.textContent.includes('Add Part')) {
+                        button.click();
+                        break;
+                    }
+                }
+            }
+        }
+        
+        // Setup the handler after a short delay
+        setTimeout(setupEnterHandler, 100);
+        </script>
+        """, unsafe_allow_html=True)
+        
+        # Regular buttons - no forms involved
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            if st.button("Add Part", type="primary", use_container_width=True, key="add_part_btn"):
+                if manual_code and manual_code.strip():
+                    if add_part(manual_code.strip(), from_scanner=False):
+                        # Clear input by resetting the key
+                        if 'entry_counter' not in st.session_state:
+                            st.session_state.entry_counter = 0
+                        st.session_state.entry_counter += 1
+                        st.rerun()
+        
+        with col2:
+            if st.button("❌ Close", key="close_manual"):
+                st.session_state.scanning_mode = None
+                # Clean up
+                if 'manual_entry_input' in st.session_state:
+                    del st.session_state.manual_entry_input
+                if 'entry_counter' in st.session_state:
+                    del st.session_state.entry_counter
+                st.rerun()
         
         st.markdown('</div>', unsafe_allow_html=True)
 
