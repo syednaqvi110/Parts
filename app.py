@@ -1,5 +1,5 @@
-# Parts Transfer Scanner - Version 7 (Working QR Scanner)
-# Successfully implemented continuous QR scanning with proper close functionality
+# Parts Transfer Scanner - Version 8 (With Pre/Post Confirmation)
+# Added pre-transfer review and post-transfer receipt screens
 
 import streamlit as st
 import pandas as pd
@@ -10,7 +10,7 @@ import time
 
 # Configure page
 st.set_page_config(
-    page_title="Parts Transfer Scanner - v7",
+    page_title="Parts Transfer Scanner - v8",
     page_icon="📦",
     layout="centered"
 )
@@ -33,6 +33,10 @@ if 'scanner_key' not in st.session_state:
     st.session_state.scanner_key = 0
 if 'last_processed_code' not in st.session_state:
     st.session_state.last_processed_code = ""
+if 'show_review' not in st.session_state:
+    st.session_state.show_review = False
+if 'completed_transfer' not in st.session_state:
+    st.session_state.completed_transfer = None
 
 # Scan cooldown to prevent rapid duplicate scans
 SCAN_COOLDOWN = 1.5  # 1.5 seconds between same codes
@@ -85,14 +89,12 @@ def remove_part(index):
     """Remove part from list"""
     if 0 <= index < len(st.session_state.parts):
         removed = st.session_state.parts.pop(index)
-        # DON'T clear last_processed_code - we want to keep it to prevent reprocessing
         st.success(f"🗑️ Removed: {removed['barcode']}")
 
 def update_quantity(index, new_qty):
     """Update part quantity"""
     if 0 <= index < len(st.session_state.parts) and new_qty > 0:
         st.session_state.parts[index]['quantity'] = new_qty
-        # DON'T clear last_processed_code - we want to keep it to prevent reprocessing
 
 def save_transfer_data(from_location, to_location, parts_data):
     """Save transfer to Google Sheets"""
@@ -127,6 +129,35 @@ def reset_transfer():
     st.session_state.last_scan_time = 0
     st.session_state.scanner_key = 0
     st.session_state.last_processed_code = ""
+    st.session_state.show_review = False
+    st.session_state.completed_transfer = None
+
+def generate_transfer_id():
+    """Generate unique transfer ID"""
+    return f"TXN-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+
+def generate_transfer_document(transfer_id, from_location, to_location, parts):
+    """Generate printable transfer document"""
+    doc_content = f"""PARTS TRANSFER DOCUMENT
+======================
+Transfer ID: {transfer_id}
+Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+FROM LOCATION: {from_location}
+TO LOCATION: {to_location}
+
+ITEMS TRANSFERRED:
+"""
+    
+    for i, part in enumerate(parts, 1):
+        doc_content += f"\n{i:2d}. {part['barcode']} - Qty: {part['quantity']} [ ] Verified"
+    
+    doc_content += f"\n\nTOTAL ITEMS: {sum(p['quantity'] for p in parts)}"
+    doc_content += f"\nTOTAL PART TYPES: {len(parts)}"
+    doc_content += "\n\nTRANSFER COMPLETED BY: ________________"
+    doc_content += "\nSIGNATURE: ________________  DATE: ________________"
+    
+    return doc_content
 
 # CSS for better UI
 st.markdown("""
@@ -157,6 +188,20 @@ st.markdown("""
         border-radius: 10px;
         margin: 10px 0;
     }
+    .review-section {
+        border: 3px solid #ff9800;
+        border-radius: 15px;
+        padding: 20px;
+        margin: 15px 0;
+        background-color: #fff8e1;
+    }
+    .receipt-section {
+        border: 3px solid #4caf50;
+        border-radius: 15px;
+        padding: 20px;
+        margin: 15px 0;
+        background-color: #f1f8e9;
+    }
     input[type="text"] {
         font-size: 16px !important;
     }
@@ -165,6 +210,140 @@ st.markdown("""
 
 # Main App
 st.title("📦 Parts Transfer")
+
+# POST-TRANSFER RECEIPT SCREEN
+if st.session_state.completed_transfer:
+    st.markdown('<div class="receipt-section">', unsafe_allow_html=True)
+    
+    st.success("✅ **TRANSFER COMPLETED SUCCESSFULLY!**")
+    st.balloons()
+    
+    transfer_data = st.session_state.completed_transfer
+    
+    # Receipt Header
+    st.header("🧾 Transfer Receipt")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.write(f"**Transfer ID:** {transfer_data['transfer_id']}")
+        st.write(f"**Date/Time:** {transfer_data['timestamp']}")
+    with col2:
+        st.write(f"**From:** {transfer_data['from_location']}")
+        st.write(f"**To:** {transfer_data['to_location']}")
+    
+    st.divider()
+    
+    # Transfer Summary
+    total_items = sum(p['quantity'] for p in transfer_data['parts'])
+    st.info(f"📊 **{total_items} total items transferred** • **{len(transfer_data['parts'])} different parts**")
+    
+    # Items with verification checkboxes
+    st.subheader("📦 Items Transferred - Physical Verification:")
+    
+    for i, part in enumerate(transfer_data['parts']):
+        col1, col2, col3 = st.columns([1, 6, 2])
+        with col1:
+            st.checkbox("", value=False, key=f"verify_{i}", help="Check after physical verification")
+        with col2:
+            st.write(f"**{part['barcode']}**")
+        with col3:
+            st.write(f"Qty: **{part['quantity']}**")
+    
+    st.divider()
+    
+    # Download transfer document
+    doc_content = generate_transfer_document(
+        transfer_data['transfer_id'],
+        transfer_data['from_location'],
+        transfer_data['to_location'],
+        transfer_data['parts']
+    )
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.download_button(
+            label="📄 Download Transfer Document",
+            data=doc_content,
+            file_name=f"transfer_{transfer_data['transfer_id']}.txt",
+            mime="text/plain",
+            type="secondary"
+        )
+    
+    with col2:
+        if st.button("🔄 Start New Transfer", type="primary"):
+            reset_transfer()
+            st.rerun()
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Stop here - don't show the rest of the app
+    st.stop()
+
+# PRE-TRANSFER REVIEW SCREEN
+elif st.session_state.show_review:
+    # Get current form data
+    from_location = st.session_state.get('from_location_review', '')
+    to_location = st.session_state.get('to_location_review', '')
+    
+    st.markdown('<div class="review-section">', unsafe_allow_html=True)
+    
+    st.warning("⚠️ **PLEASE REVIEW TRANSFER DETAILS BEFORE PROCEEDING**")
+    st.header("📋 Transfer Summary")
+    
+    # Location summary
+    col1, col2 = st.columns(2)
+    with col1:
+        st.info(f"**FROM LOCATION:**\n{from_location}")
+    with col2:
+        st.info(f"**TO LOCATION:**\n{to_location}")
+    
+    # Parts summary
+    total_items = sum(p['quantity'] for p in st.session_state.parts)
+    st.success(f"📊 **{total_items} total items** • **{len(st.session_state.parts)} different parts**")
+    
+    st.subheader("📦 Items to Transfer:")
+    
+    # Show all parts in a clean format
+    for i, part in enumerate(st.session_state.parts, 1):
+        st.write(f"{i:2d}. **{part['barcode']}** - Quantity: **{part['quantity']}**")
+    
+    st.divider()
+    
+    # Confirmation buttons
+    st.warning("🔍 **Please double-check all details above are correct**")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("❌ Cancel - Let Me Check", type="secondary"):
+            st.session_state.show_review = False
+            st.rerun()
+    
+    with col2:
+        if st.button("✅ CONFIRM TRANSFER", type="primary"):
+            # Actually execute the transfer
+            parts_data = [{'barcode': p['barcode'], 'quantity': p['quantity']} for p in st.session_state.parts]
+            
+            if save_transfer_data(from_location, to_location, parts_data):
+                # Store completed transfer data for receipt
+                transfer_id = generate_transfer_id()
+                st.session_state.completed_transfer = {
+                    'transfer_id': transfer_id,
+                    'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    'from_location': from_location,
+                    'to_location': to_location,
+                    'parts': parts_data
+                }
+                st.session_state.show_review = False
+                st.rerun()
+            else:
+                st.error("Transfer failed - please try again")
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Stop here - don't show the rest of the app
+    st.stop()
+
+# MAIN APP INTERFACE (when not in review or receipt mode)
 
 # Transfer Details Section
 with st.container():
@@ -195,7 +374,7 @@ with st.container():
     
     st.markdown('</div>', unsafe_allow_html=True)
 
-# QR Scanner Section - WORKING VERSION
+# QR Scanner Section
 if st.session_state.scanning_mode == "qr_scanner":
     with st.container():
         st.markdown('<div class="scanning-section scanner-active">', unsafe_allow_html=True)
@@ -205,7 +384,6 @@ if st.session_state.scanning_mode == "qr_scanner":
         # Close button FIRST - before scanner renders
         if st.button("❌ Close Scanner", key="close_scanner"):
             st.session_state.scanning_mode = None
-            # Change the scanner key to completely reset it
             st.session_state.scanner_key += 1
             # Clear any scanner state
             for key in list(st.session_state.keys()):
@@ -218,7 +396,6 @@ if st.session_state.scanning_mode == "qr_scanner":
             
             # Only render scanner if we're not closing
             if st.session_state.scanning_mode == "qr_scanner":
-                # Use a unique key that changes when we reset
                 scanner_key = f'qrcode_scanner_{st.session_state.scanner_key}'
                 qr_code = qrcode_scanner(key=scanner_key)
                 
@@ -241,21 +418,6 @@ elif st.session_state.scanning_mode == "manual":
         
         st.info("⌨️ **Manual Entry Mode** - Enter part numbers")
         
-        # Auto-focus script
-        st.markdown("""
-        <script>
-        setTimeout(function() {
-            var inputs = document.querySelectorAll('input[type="text"]');
-            for (var i = 0; i < inputs.length; i++) {
-                if (inputs[i].placeholder && inputs[i].placeholder.includes('Type or scan')) {
-                    inputs[i].focus();
-                    break;
-                }
-            }
-        }, 200);
-        </script>
-        """, unsafe_allow_html=True)
-        
         # Form for Enter key support
         with st.form(key='manual_form', clear_on_submit=True, border=False):
             manual_code = st.text_input(
@@ -265,7 +427,6 @@ elif st.session_state.scanning_mode == "manual":
                 label_visibility="collapsed"
             )
             
-            # Hidden submit button to prevent browser tooltip
             submitted = st.form_submit_button("Add Part", type="primary", use_container_width=True)
             
             if submitted and manual_code:
@@ -326,27 +487,22 @@ if st.session_state.parts:
 else:
     st.info("No parts added yet - select a method above to start")
 
-# Complete Transfer Section
-st.header("✅ Complete Transfer")
+# Complete Transfer Section (now shows Review button)
+st.header("🔍 Review Transfer")
 
-can_complete = (
+can_proceed = (
     from_location and 
     to_location and 
-    st.session_state.parts and 
-    not st.session_state.transfer_complete
+    st.session_state.parts
 )
 
-if can_complete:
-    if st.button("🚀 Complete Transfer", type="primary"):
-        parts_data = [{'barcode': p['barcode'], 'quantity': p['quantity']} for p in st.session_state.parts]
-        
-        if save_transfer_data(from_location, to_location, parts_data):
-            st.success(f"✅ **Transfer Completed!** {sum(p['quantity'] for p in st.session_state.parts)} items transferred")
-            st.balloons()
-            
-            # Auto-reset for new transfer
-            reset_transfer()
-            st.rerun()
+if can_proceed:
+    if st.button("🔍 Review Transfer", type="primary"):
+        # Store locations for review screen
+        st.session_state.from_location_review = from_location
+        st.session_state.to_location_review = to_location
+        st.session_state.show_review = True
+        st.rerun()
 else:
     # Show what's missing
     missing = []
