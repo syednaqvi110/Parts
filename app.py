@@ -503,6 +503,8 @@ if can_proceed:
         st.session_state.to_location_review = to_location
         st.session_state.show_review = True
         st.rerun()
+    
+    st.info("👆 Click 'Review Transfer' to see confirmation screen before completing")
 else:
     # Show what's missing
     missing = []
@@ -515,6 +517,12 @@ else:
     
     if missing:
         st.warning(f"⚠️ **Required:** {', '.join(missing)}")
+
+# Debug info (remove this later)
+st.sidebar.write("**Debug Info:**")
+st.sidebar.write(f"show_review: {st.session_state.show_review}")
+st.sidebar.write(f"completed_transfer: {st.session_state.completed_transfer is not None}")
+st.sidebar.write(f"parts count: {len(st.session_state.parts)}")
 
 # Emergency reset button
 if st.session_state.parts:
