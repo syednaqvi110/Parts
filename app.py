@@ -182,34 +182,8 @@ st.markdown("""
         border-radius: 10px;
         margin: 10px 0;
     }
-    .review-section {
-        border: 3px solid #ff9800;
-        border-radius: 15px;
-        padding: 20px;
-        margin: 15px 0;
-        background-color: #fff8e1;
-    }
-    .receipt-section {
-        border: 3px solid #4caf50;
-        border-radius: 15px;
-        padding: 20px;
-        margin: 15px 0;
-        background-color: #f1f8e9;
-    }
     input[type="text"] {
         font-size: 16px !important;
-    }
-    /* Hide empty form containers that create the colored bars */
-    .stForm:empty,
-    .stForm > div:empty,
-    div[data-testid="stForm"]:empty,
-    div[data-testid="stForm"] > div:empty {
-        display: none !important;
-    }
-    /* Hide empty form borders */
-    .stForm[style*="border: 1px solid"],
-    div[data-testid="stForm"][style*="border"] {
-        border: none !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -294,26 +268,24 @@ elif st.session_state.scanning_mode == "manual":
         
         st.info("⌨️ **Manual Entry Mode** - Type part number and press Enter")
         
-        # Use text_input with on_change callback instead of forms
-        def handle_manual_input():
-            if st.session_state.manual_input_field:
-                if add_part(st.session_state.manual_input_field, from_scanner=False):
-                    st.session_state.manual_input_field = ""  # Clear input
+        # Use form with border=False to completely remove borders
+        with st.form(key='manual_form', clear_on_submit=True, border=False):
+            manual_code = st.text_input(
+                "Part Number", 
+                placeholder="Type or scan part number here",
+                label_visibility="collapsed"
+            )
+            
+            # Submit button for Enter key functionality
+            submitted = st.form_submit_button("Add Part")
+            
+            if submitted and manual_code:
+                if add_part(manual_code, from_scanner=False):
                     st.rerun()
         
-        manual_code = st.text_input(
-            "Part Number", 
-            placeholder="Type or scan part number here",
-            label_visibility="collapsed",
-            key="manual_input_field",
-            on_change=handle_manual_input
-        )
-        
-        # Close button
+        # Close button outside the form
         if st.button("❌ Close Manual Entry", key="close_manual"):
             st.session_state.scanning_mode = None
-            if 'manual_input_field' in st.session_state:
-                del st.session_state.manual_input_field
             st.rerun()
         
         st.markdown('</div>', unsafe_allow_html=True)
