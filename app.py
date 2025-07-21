@@ -16,7 +16,7 @@ st.set_page_config(
 )
 
 # Google Sheets URL
-GOOGLE_SHEETS_URL = 'https://script.google.com/macros/s/AKfycbw6WEuDlZXQZ-4xWrdwrEts182yB9OEpkH6b6il5k44eQpdv9F9ntqEoub5cmH52-nbtQ/exec'
+GOOGLE_SHEETS_URL = 'https://script.google.com/macros/s/AKfycbwEdqzmyAQf395BGSJLqSpKk5vKc5-rno3xDHpBHYvkDxARVYmzcizCFsuZZ72SySuxlg/exec'
 
 # Initialize session state
 if 'parts' not in st.session_state:
