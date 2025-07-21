@@ -313,37 +313,54 @@ elif st.session_state.scanning_mode == "manual":
         )
         
         # JavaScript to handle Enter key WITHOUT forms
-        st.markdown("""
+        st.markdown(f"""
         <script>
-        function setupEnterHandler() {
-            // Find the text input
-            const inputs = document.querySelectorAll('input[aria-label="Part Number"]');
-            if (inputs.length > 0) {
-                const input = inputs[inputs.length - 1]; // Get the latest one
-                
+        function setupEnterHandler_{st.session_state.get('entry_counter', 0)}() {{
+            // Find the text input for manual entry
+            const textInputs = document.querySelectorAll('input[type="text"]');
+            let targetInput = null;
+            
+            // Find the input with our placeholder text
+            for (let input of textInputs) {{
+                if (input.placeholder && input.placeholder.includes('Type or scan part number')) {{
+                    targetInput = input;
+                    break;
+                }}
+            }}
+            
+            if (targetInput) {{
                 // Remove any existing listeners
-                input.removeEventListener('keydown', handleEnter);
+                targetInput.removeEventListener('keydown', handleEnterKey);
                 
-                // Add Enter key handler
-                input.addEventListener('keydown', handleEnter);
-            }
-        }
+                // Add new Enter key handler
+                targetInput.addEventListener('keydown', handleEnterKey);
+                console.log('Enter key handler attached to input');
+            }} else {{
+                console.log('Could not find target input');
+            }}
+        }}
         
-        function handleEnter(event) {
-            if (event.key === 'Enter' && event.target.value.trim()) {
-                // Find and click the Add Part button
+        function handleEnterKey(event) {{
+            if (event.key === 'Enter' && event.target.value.trim()) {{
+                console.log('Enter pressed with value:', event.target.value);
+                
+                // Find the Add Part button and click it
                 const buttons = document.querySelectorAll('button');
-                for (let button of buttons) {
-                    if (button.textContent.includes('Add Part')) {
+                for (let button of buttons) {{
+                    if (button.textContent.includes('Add Part')) {{
+                        console.log('Clicking Add Part button');
                         button.click();
-                        break;
-                    }
-                }
-            }
-        }
+                        return;
+                    }}
+                }}
+                console.log('Add Part button not found');
+            }}
+        }}
         
-        // Setup the handler after a short delay
-        setTimeout(setupEnterHandler, 100);
+        // Setup the handler multiple times to ensure it catches the input
+        setTimeout(() => setupEnterHandler_{st.session_state.get('entry_counter', 0)}(), 100);
+        setTimeout(() => setupEnterHandler_{st.session_state.get('entry_counter', 0)}(), 500);
+        setTimeout(() => setupEnterHandler_{st.session_state.get('entry_counter', 0)}(), 1000);
         </script>
         """, unsafe_allow_html=True)
         
