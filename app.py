@@ -282,24 +282,27 @@ elif st.session_state.scanning_mode == "manual":
         
         st.info("⌨️ **Manual Entry Mode** - Enter part numbers below")
         
-        # Direct input without form to avoid blue bar
-        manual_code = st.text_input(
-            "Enter part number", 
-            placeholder="Type or scan part number here and press Enter",
-            key="manual_input",
-            on_change=None
-        )
+        # Use form to enable Enter key functionality
+        with st.form(key='manual_form', clear_on_submit=True, border=False):
+            manual_code = st.text_input(
+                "Enter part number", 
+                placeholder="Type or scan part number here and press Enter",
+                label_visibility="collapsed"
+            )
+            
+            # Hidden submit button (Enter key will trigger this)
+            submitted = st.form_submit_button("Add", label_visibility="hidden")
+            
+            if submitted and manual_code:
+                if add_part(manual_code, from_scanner=False):
+                    st.rerun()
         
+        # Regular button for manual clicking and close button
         col1, col2 = st.columns([3, 1])
         with col1:
-            if st.button("Add Part", type="primary", use_container_width=True):
-                if manual_code:
-                    if add_part(manual_code, from_scanner=False):
-                        # Clear the input by changing its key
-                        if 'manual_input_counter' not in st.session_state:
-                            st.session_state.manual_input_counter = 0
-                        st.session_state.manual_input_counter += 1
-                        st.rerun()
+            if st.button("Add Part", type="secondary", use_container_width=True):
+                # This won't work without form, but kept for visual clarity
+                pass
         
         with col2:
             if st.button("❌ Close", key="close_manual"):
@@ -384,8 +387,6 @@ if can_complete:
     with st.expander("📦 View all items to transfer", expanded=True):
         for i, part in enumerate(st.session_state.parts, 1):
             st.write(f"{i}. **{part['barcode']}** - Qty: {part['quantity']}")
-    
-    st.warning("⚠️ **Please verify the above information is correct**")
     
     if st.button("🚀 Complete Transfer", type="primary"):
         parts_data = [{'barcode': p['barcode'], 'quantity': p['quantity']} for p in st.session_state.parts]
