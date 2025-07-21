@@ -199,6 +199,18 @@ st.markdown("""
     input[type="text"] {
         font-size: 16px !important;
     }
+    /* Hide empty form containers that create the colored bars */
+    .stForm:empty,
+    .stForm > div:empty,
+    div[data-testid="stForm"]:empty,
+    div[data-testid="stForm"] > div:empty {
+        display: none !important;
+    }
+    /* Hide empty form borders */
+    .stForm[style*="border: 1px solid"],
+    div[data-testid="stForm"][style*="border"] {
+        border: none !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
