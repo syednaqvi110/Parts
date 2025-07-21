@@ -280,34 +280,36 @@ elif st.session_state.scanning_mode == "manual":
     with st.container():
         st.markdown('<div class="scanning-section">', unsafe_allow_html=True)
         
-        st.info("⌨️ **Manual Entry Mode** - Enter part numbers below")
+        st.info("⌨️ **Manual Entry Mode** - Type part number and press Enter")
         
         # Use form to enable Enter key functionality
         with st.form(key='manual_form', clear_on_submit=True, border=False):
             manual_code = st.text_input(
-                "Enter part number", 
-                placeholder="Type or scan part number here and press Enter",
+                "Part Number", 
+                placeholder="Type or scan part number here",
                 label_visibility="collapsed"
             )
             
-            # Hidden submit button (Enter key will trigger this)
-            submitted = st.form_submit_button("Add", label_visibility="hidden")
+            # Submit button for Enter key (but hide it with CSS)
+            submitted = st.form_submit_button("Add Part")
             
             if submitted and manual_code:
                 if add_part(manual_code, from_scanner=False):
                     st.rerun()
         
-        # Regular button for manual clicking and close button
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            if st.button("Add Part", type="secondary", use_container_width=True):
-                # This won't work without form, but kept for visual clarity
-                pass
+        # Close button outside the form
+        if st.button("❌ Close Manual Entry", key="close_manual"):
+            st.session_state.scanning_mode = None
+            st.rerun()
         
-        with col2:
-            if st.button("❌ Close", key="close_manual"):
-                st.session_state.scanning_mode = None
-                st.rerun()
+        # CSS to hide the submit button
+        st.markdown("""
+        <style>
+        .stForm button[kind="primaryFormSubmit"] {
+            display: none;
+        }
+        </style>
+        """, unsafe_allow_html=True)
         
         st.markdown('</div>', unsafe_allow_html=True)
 
