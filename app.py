@@ -185,6 +185,42 @@ st.markdown("""
     input[type="text"] {
         font-size: 16px !important;
     }
+    
+    /* AGGRESSIVE TARGETING OF EMPTY CONTAINERS */
+    /* Target all empty divs that could be creating the bars */
+    div[data-testid="stVerticalBlock"]:empty,
+    div[data-testid="stHorizontalBlock"]:empty,
+    div[data-testid="stForm"]:empty,
+    div[data-testid="element-container"]:empty,
+    .element-container:empty,
+    .stVerticalBlock:empty,
+    .stHorizontalBlock:empty,
+    .stForm:empty {
+        display: none !important;
+        height: 0 !important;
+        min-height: 0 !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        border: none !important;
+    }
+    
+    /* Target containers with only whitespace */
+    div[data-testid="stVerticalBlock"]:not(:has(*)),
+    div[data-testid="element-container"]:not(:has(*)) {
+        display: none !important;
+    }
+    
+    /* Remove any mysterious borders from containers */
+    div[style*="border"],
+    div[style*="outline"] {
+        border: none !important;
+        outline: none !important;
+    }
+    
+    /* Nuclear option - hide any div that's creating visual borders but has no meaningful content */
+    div:empty:not([data-testid="stChatMessage"]):not([data-testid="stSelectbox"]):not([data-testid="stTextInput"]) {
+        display: none !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
