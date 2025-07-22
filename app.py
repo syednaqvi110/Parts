@@ -1,5 +1,5 @@
-# Parts Transfer Scanner - Version 8 (With Pre/Post Confirmation)
-# Added pre-transfer review and post-transfer receipt screens
+# Parts Transfer Scanner - Version 8 (With Keep-Alive)
+# Added auto-refresh keep-alive to prevent sleeping
 
 import streamlit as st
 import pandas as pd
@@ -15,8 +15,17 @@ st.set_page_config(
     layout="centered"
 )
 
+# Health check endpoint - accessible at /?health=check
+if 'health' in st.query_params and st.query_params['health'] == 'check':
+    st.json({
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "uptime": time.time()
+    })
+    st.stop()
+
 # Google Sheets URL
-GOOGLE_SHEETS_URL = 'https://script.google.com/macros/s/AKfycbwAa1qy-HhRlnqacGcsYhX1xZJwMDEThI53qNtSykjOsFjjfgWw4opdygHr5W8MQtFFbQ/exec'
+GOOGLE_SHEETS_URL = 'https://script.google.com/macros/s/AKfycbyCVe8VytbR-UqcXEcshlfbbVf6cG3Y61PfP3hnpZPY1QvIDxIUALpB2_StHCf4MC3VZA/exec'
 
 # Initialize session state
 if 'parts' not in st.session_state:
@@ -33,6 +42,13 @@ if 'scanner_key' not in st.session_state:
     st.session_state.scanner_key = 0
 if 'last_processed_code' not in st.session_state:
     st.session_state.last_processed_code = ""
+if 'keep_alive_active' not in st.session_state:
+    st.session_state.keep_alive_active = True
+if 'last_activity' not in st.session_state:
+    st.session_state.last_activity = time.time()
+
+# Update last activity timestamp
+st.session_state.last_activity = time.time()
 
 # Scan cooldown to prevent rapid duplicate scans
 SCAN_COOLDOWN = 1.5  # 1.5 seconds between same codes
