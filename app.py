@@ -25,7 +25,7 @@ if 'health' in st.query_params and st.query_params['health'] == 'check':
     st.stop()
 
 # Google Sheets URL
-GOOGLE_SHEETS_URL = 'https://script.google.com/macros/s/AKfycbyCVe8VytbR-UqcXEcshlfbbVf6cG3Y61PfP3hnpZPY1QvIDxIUALpB2_StHCf4MC3VZA/exec'
+GOOGLE_SHEETS_URL = 'https://script.google.com/macros/s/AKfycbxzaNbIreGkCcjdS4n2u4bLIuQyISaVIPl_va7gX0qLikpsrksdW7Y9SrhsRd9z2jmxXw/exec'
 
 # Initialize session state
 if 'parts' not in st.session_state:
