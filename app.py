@@ -402,6 +402,51 @@ st.markdown("""
         visibility: hidden !important;
         display: none !important;
     }
+    
+    /* Hide the new "Created by" icon in lower right corner */
+    [data-testid="stAppViewBlockContainer"] > div:last-child {
+        visibility: hidden !important;
+        display: none !important;
+    }
+    
+    /* Alternative selectors for "created by" icon */
+    .stCreatedBy {
+        visibility: hidden !important;
+        display: none !important;
+    }
+    
+    /* Hide creator badge/profile icon */
+    [class*="creator" i], [class*="profile" i]:not([data-testid]) {
+        visibility: hidden !important;
+        display: none !important;
+    }
+    
+    /* Hide elements containing GitHub or creator info */
+    [title*="created" i], [title*="github" i] {
+        visibility: hidden !important;
+        display: none !important;
+    }
+    
+    /* Mobile-specific hiding for creator elements */
+    @media screen and (max-width: 768px) {
+        /* Hide floating elements in lower corners */
+        div[style*="position: fixed"][style*="bottom"] {
+            visibility: hidden !important;
+            display: none !important;
+        }
+        
+        /* Hide creator icon specifically on mobile */
+        [data-testid="stApp"] > div:last-child > div:last-child {
+            visibility: hidden !important;
+            display: none !important;
+        }
+    }
+    
+    /* Target specific GitHub-related badges or icons */
+    [aria-label*="github" i], [title*="repository" i] {
+        visibility: hidden !important;
+        display: none !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
