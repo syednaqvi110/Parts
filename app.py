@@ -310,6 +310,42 @@ st.markdown("""
         0% { transform: rotate(0deg); }
         100% { transform: rotate(360deg); }
     }
+    
+    /* Hide Deploy Button and GitHub Elements */
+    .stAppDeployButton {
+        visibility: hidden;
+        display: none !important;
+    }
+    
+    /* Hide Hamburger Menu */
+    .stAppToolbar {
+        visibility: hidden;
+        display: none !important;
+    }
+    
+    /* Hide "Made with Streamlit" footer */
+    footer {
+        visibility: hidden;
+        display: none !important;
+    }
+    
+    /* Hide GitHub Fork button (if deployed) */
+    .viewerBadge_container__1QSob {
+        visibility: hidden;
+        display: none !important;
+    }
+    
+    /* Alternative selectors for different versions */
+    button[title="Deploy this app"] {
+        visibility: hidden;
+        display: none !important;
+    }
+    
+    /* Hide any element with "github" in the class name */
+    [class*="github" i] {
+        visibility: hidden;
+        display: none !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
