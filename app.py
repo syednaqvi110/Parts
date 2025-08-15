@@ -32,6 +32,8 @@ if 'parts' not in st.session_state:
     st.session_state.parts = []
 if 'transfer_complete' not in st.session_state:
     st.session_state.transfer_complete = False
+if 'transfer_in_progress' not in st.session_state:
+    st.session_state.transfer_in_progress = False
 if 'scanning_mode' not in st.session_state:
     st.session_state.scanning_mode = None
 if 'last_scanned_code' not in st.session_state:
@@ -54,7 +56,7 @@ st.session_state.last_activity = time.time()
 SCAN_COOLDOWN = 1.5  # 1.5 seconds between same codes
 
 def add_part(barcode, from_scanner=False):
-    """Add or update part in the list"""
+    """Add or update part in the list - latest items appear at top"""
     if not barcode or len(barcode.strip()) < 2:
         if from_scanner:
             st.error("Invalid QR code")
@@ -75,17 +77,27 @@ def add_part(barcode, from_scanner=False):
         st.session_state.last_scan_time = current_time
     
     # Check if part already exists
-    for part in st.session_state.parts:
+    existing_part_index = None
+    for i, part in enumerate(st.session_state.parts):
         if part['barcode'] == barcode:
-            part['quantity'] += 1
-            if from_scanner:
-                st.success(f"🎯 Item: {barcode} scanned (Total qty: {part['quantity']})")
-            else:
-                st.success(f"✅ Updated: {barcode} (qty: {part['quantity']})")
-            return True
+            existing_part_index = i
+            break
     
-    # Add new part
-    st.session_state.parts.append({
+    if existing_part_index is not None:
+        # Remove existing part and add it to the top with updated quantity
+        existing_part = st.session_state.parts.pop(existing_part_index)
+        existing_part['quantity'] += 1
+        existing_part['timestamp'] = datetime.now()
+        st.session_state.parts.insert(0, existing_part)
+        
+        if from_scanner:
+            st.success(f"🎯 Item: {barcode} scanned (Total qty: {existing_part['quantity']})")
+        else:
+            st.success(f"✅ Updated: {barcode} (qty: {existing_part['quantity']})")
+        return True
+    
+    # Add new part at the top of the list
+    st.session_state.parts.insert(0, {
         'barcode': barcode,
         'quantity': 1,
         'timestamp': datetime.now()
@@ -107,6 +119,7 @@ def update_quantity(index, new_qty):
     """Update part quantity"""
     if 0 <= index < len(st.session_state.parts) and new_qty > 0:
         st.session_state.parts[index]['quantity'] = new_qty
+        st.session_state.parts[index]['timestamp'] = datetime.now()
 
 def save_transfer_data(from_location, to_location, parts_data):
     """Save transfer to Google Sheets"""
@@ -136,6 +149,7 @@ def reset_transfer():
     """Reset everything for new transfer"""
     st.session_state.parts = []
     st.session_state.transfer_complete = False
+    st.session_state.transfer_in_progress = False
     st.session_state.scanning_mode = None
     st.session_state.last_scanned_code = ""
     st.session_state.last_scan_time = 0
@@ -200,6 +214,14 @@ st.markdown("""
     }
     input[type="text"] {
         font-size: 16px !important;
+    }
+    
+    /* Disabled button styling */
+    .stButton > button:disabled {
+        background-color: #cccccc !important;
+        color: #666666 !important;
+        cursor: not-allowed !important;
+        opacity: 0.6 !important;
     }
     
     /* AGGRESSIVE TARGETING OF EMPTY CONTAINERS */
@@ -357,14 +379,15 @@ if st.session_state.parts:
     # Parts display
     for i, part in enumerate(st.session_state.parts):
         with st.container():
-            col1, col2, col3 = st.columns([4, 2, 1])
+            col1, col2, col3 = st.columns([4, 3, 1])
             
             with col1:
                 st.write(f"**{part['barcode']}**")
             
             with col2:
-                # Quantity controls
-                qty_col1, qty_col2, qty_col3 = st.columns([1, 2, 1])
+                # Quantity controls - now with manual input
+                qty_col1, qty_col2, qty_col3, qty_col4 = st.columns([1, 1, 2, 1])
+                
                 with qty_col1:
                     if st.button("➖", key=f"dec_{i}", help="Decrease"):
                         if part['quantity'] > 1:
@@ -372,12 +395,28 @@ if st.session_state.parts:
                             st.rerun()
                 
                 with qty_col2:
-                    st.write(f"**{part['quantity']}**")
-                
-                with qty_col3:
                     if st.button("➕", key=f"inc_{i}", help="Increase"):
                         update_quantity(i, part['quantity'] + 1)
                         st.rerun()
+                
+                with qty_col3:
+                    # Manual quantity input
+                    new_qty = st.number_input(
+                        "",
+                        min_value=1,
+                        max_value=9999,
+                        value=part['quantity'],
+                        key=f"qty_input_{i}",
+                        label_visibility="collapsed"
+                    )
+                    
+                    # Update quantity if changed
+                    if new_qty != part['quantity']:
+                        update_quantity(i, new_qty)
+                        st.rerun()
+                
+                with qty_col4:
+                    st.write("qty")
             
             with col3:
                 if st.button("🗑️", key=f"del_{i}", help="Remove"):
@@ -396,7 +435,8 @@ can_complete = (
     from_location and 
     to_location and 
     st.session_state.parts and 
-    not st.session_state.transfer_complete
+    not st.session_state.transfer_complete and
+    not st.session_state.transfer_in_progress
 )
 
 if can_complete:
@@ -420,34 +460,52 @@ if can_complete:
             st.write(f"{i}. **{part['barcode']}** - Qty: {part['quantity']}")
     
     if st.button("🚀 Complete Transfer", type="primary"):
-        parts_data = [{'barcode': p['barcode'], 'quantity': p['quantity']} for p in st.session_state.parts]
-        
-        if save_transfer_data(from_location, to_location, parts_data):
-            st.success(f"✅ **Transfer Completed!** {sum(p['quantity'] for p in st.session_state.parts)} items transferred")
-            st.balloons()
-            
-            # Show completed transfer summary
-            st.subheader("🧾 Transfer Receipt")
-            st.write(f"**Transfer ID:** TXN-{datetime.now().strftime('%Y%m%d%H%M%S')}")
-            st.write(f"**From:** {from_location} **→ To:** {to_location}")
-            st.write(f"**Total Items:** {total_items}")
-            st.write(f"**Completed:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-            
-            # Auto-reset for new transfer
-            reset_transfer()
-            st.rerun()
-else:
-    # Show what's missing
-    missing = []
-    if not from_location:
-        missing.append("From Location")
-    if not to_location:
-        missing.append("To Location")
-    if not st.session_state.parts:
-        missing.append("Add at least one part")
+        # Set transfer in progress to prevent multiple clicks
+        st.session_state.transfer_in_progress = True
+        st.rerun()
+
+elif st.session_state.transfer_in_progress:
+    # Show processing state
+    st.info("🔄 **Processing transfer...** Please wait")
     
-    if missing:
-        st.warning(f"⚠️ **Required:** {', '.join(missing)}")
+    # Perform the actual transfer
+    parts_data = [{'barcode': p['barcode'], 'quantity': p['quantity']} for p in st.session_state.parts]
+    total_items = sum(p['quantity'] for p in st.session_state.parts)
+    
+    if save_transfer_data(from_location, to_location, parts_data):
+        st.success(f"✅ **Transfer Completed!** {total_items} items transferred")
+        st.balloons()
+        
+        # Show completed transfer summary
+        st.subheader("🧾 Transfer Receipt")
+        st.write(f"**Transfer ID:** TXN-{datetime.now().strftime('%Y%m%d%H%M%S')}")
+        st.write(f"**From:** {from_location} **→ To:** {to_location}")
+        st.write(f"**Total Items:** {total_items}")
+        st.write(f"**Completed:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        
+        # Auto-reset for new transfer
+        reset_transfer()
+        st.rerun()
+    else:
+        # Reset transfer in progress on failure
+        st.session_state.transfer_in_progress = False
+        st.rerun()
+
+else:
+    # Show what's missing or if disabled
+    if st.session_state.transfer_in_progress:
+        st.info("🔄 **Transfer in progress...** Please wait")
+    else:
+        missing = []
+        if not from_location:
+            missing.append("From Location")
+        if not to_location:
+            missing.append("To Location")
+        if not st.session_state.parts:
+            missing.append("Add at least one part")
+        
+        if missing:
+            st.warning(f"⚠️ **Required:** {', '.join(missing)}")
 
 # Emergency reset button
 if st.session_state.parts:
