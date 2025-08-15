@@ -313,37 +313,93 @@ st.markdown("""
     
     /* Hide Deploy Button and GitHub Elements */
     .stAppDeployButton {
-        visibility: hidden;
+        visibility: hidden !important;
         display: none !important;
     }
     
     /* Hide Hamburger Menu */
     .stAppToolbar {
-        visibility: hidden;
+        visibility: hidden !important;
         display: none !important;
     }
     
-    /* Hide "Made with Streamlit" footer */
+    #MainMenu {
+        visibility: hidden !important;
+        display: none !important;
+    }
+    
+    /* Hide "Made with Streamlit" footer and all footer elements */
     footer {
-        visibility: hidden;
+        visibility: hidden !important;
+        display: none !important;
+    }
+    
+    .stBottom {
+        visibility: hidden !important;
+        display: none !important;
+    }
+    
+    /* Hide Streamlit header */
+    header {
+        visibility: hidden !important;
         display: none !important;
     }
     
     /* Hide GitHub Fork button (if deployed) */
     .viewerBadge_container__1QSob {
-        visibility: hidden;
+        visibility: hidden !important;
         display: none !important;
     }
     
     /* Alternative selectors for different versions */
     button[title="Deploy this app"] {
-        visibility: hidden;
+        visibility: hidden !important;
         display: none !important;
     }
     
     /* Hide any element with "github" in the class name */
     [class*="github" i] {
-        visibility: hidden;
+        visibility: hidden !important;
+        display: none !important;
+    }
+    
+    /* Hide watermarks and branding */
+    .stActionButton {
+        visibility: hidden !important;
+        display: none !important;
+    }
+    
+    /* Mobile-specific hiding */
+    @media screen and (max-width: 768px) {
+        footer, .stBottom, #MainMenu, header {
+            visibility: hidden !important;
+            display: none !important;
+            height: 0 !important;
+            min-height: 0 !important;
+        }
+        
+        /* Hide any mobile-specific streamlit branding */
+        [data-testid="stHeader"] {
+            visibility: hidden !important;
+            display: none !important;
+        }
+        
+        /* Remove any mobile toolbars */
+        .stAppToolbar, .stAppDeployButton {
+            visibility: hidden !important;
+            display: none !important;
+        }
+    }
+    
+    /* Force hide any remaining streamlit elements */
+    [class*="streamlit" i]:not([data-testid]) {
+        visibility: hidden !important;
+        display: none !important;
+    }
+    
+    /* Hide any "powered by" or similar text */
+    [class*="powered" i], [class*="made" i] {
+        visibility: hidden !important;
         display: none !important;
     }
 </style>
