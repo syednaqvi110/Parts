@@ -48,6 +48,8 @@ if 'keep_alive_active' not in st.session_state:
     st.session_state.keep_alive_active = True
 if 'last_activity' not in st.session_state:
     st.session_state.last_activity = time.time()
+if 'show_transfer_modal' not in st.session_state:
+    st.session_state.show_transfer_modal = False
 
 # Update last activity timestamp
 st.session_state.last_activity = time.time()
@@ -150,6 +152,7 @@ def reset_transfer():
     st.session_state.parts = []
     st.session_state.transfer_complete = False
     st.session_state.transfer_in_progress = False
+    st.session_state.show_transfer_modal = False
     st.session_state.scanning_mode = None
     st.session_state.last_scanned_code = ""
     st.session_state.last_scan_time = 0
@@ -258,6 +261,54 @@ st.markdown("""
     /* Nuclear option - hide any div that's creating visual borders but has no meaningful content */
     div:empty:not([data-testid="stChatMessage"]):not([data-testid="stSelectbox"]):not([data-testid="stTextInput"]) {
         display: none !important;
+    }
+    
+    /* Hide number input spinners on mobile and desktop */
+    input[type="number"]::-webkit-outer-spin-button,
+    input[type="number"]::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+    }
+    input[type="number"] {
+        -moz-appearance: textfield;
+    }
+    
+    /* Modal overlay styles */
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.7);
+        z-index: 9999;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
+    
+    .modal-content {
+        background-color: white;
+        padding: 40px;
+        border-radius: 15px;
+        text-align: center;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        min-width: 300px;
+    }
+    
+    .spinner {
+        border: 4px solid #f3f3f3;
+        border-top: 4px solid #3498db;
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 20px auto;
+    }
+    
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
     }
 </style>
 """, unsafe_allow_html=True)
@@ -400,20 +451,26 @@ if st.session_state.parts:
                         st.rerun()
                 
                 with qty_col3:
-                    # Manual quantity input
-                    new_qty = st.number_input(
+                    # Manual quantity input using text input to avoid mobile spinners
+                    qty_input = st.text_input(
                         "",
-                        min_value=1,
-                        max_value=9999,
-                        value=part['quantity'],
+                        value=str(part['quantity']),
                         key=f"qty_input_{i}",
-                        label_visibility="collapsed"
+                        label_visibility="collapsed",
+                        placeholder="Qty"
                     )
                     
-                    # Update quantity if changed
-                    if new_qty != part['quantity']:
-                        update_quantity(i, new_qty)
-                        st.rerun()
+                    # Validate and update quantity if changed
+                    try:
+                        new_qty = int(qty_input) if qty_input.strip() else part['quantity']
+                        if new_qty > 0 and new_qty != part['quantity']:
+                            update_quantity(i, new_qty)
+                            st.rerun()
+                        elif new_qty <= 0:
+                            st.error("Quantity must be > 0")
+                    except ValueError:
+                        if qty_input.strip():  # Only show error if not empty
+                            st.error("Enter valid number")
                 
                 with qty_col4:
                     st.write("qty")
@@ -460,36 +517,10 @@ if can_complete:
             st.write(f"{i}. **{part['barcode']}** - Qty: {part['quantity']}")
     
     if st.button("🚀 Complete Transfer", type="primary"):
-        # Set transfer in progress to prevent multiple clicks
+        # Show modal immediately when button is clicked
+        st.session_state.show_transfer_modal = True
         st.session_state.transfer_in_progress = True
-        
-        # Show loading popup and perform transfer
-        with st.spinner("🔄 Transferring parts... Please wait"):
-            parts_data = [{'barcode': p['barcode'], 'quantity': p['quantity']} for p in st.session_state.parts]
-            total_items = sum(p['quantity'] for p in st.session_state.parts)
-            
-            # Add a small delay to ensure the spinner shows
-            time.sleep(0.5)
-            
-            if save_transfer_data(from_location, to_location, parts_data):
-                st.session_state.transfer_in_progress = False
-                st.success(f"✅ **Transfer Completed!** {total_items} items transferred")
-                st.balloons()
-                
-                # Show completed transfer summary
-                st.subheader("🧾 Transfer Receipt")
-                st.write(f"**Transfer ID:** TXN-{datetime.now().strftime('%Y%m%d%H%M%S')}")
-                st.write(f"**From:** {from_location} **→ To:** {to_location}")
-                st.write(f"**Total Items:** {total_items}")
-                st.write(f"**Completed:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-                
-                # Auto-reset for new transfer
-                reset_transfer()
-                st.rerun()
-            else:
-                # Reset transfer in progress on failure
-                st.session_state.transfer_in_progress = False
-                st.rerun()
+        st.rerun()
 
 else:
     # Show what's missing or if disabled
@@ -506,6 +537,51 @@ else:
         
         if missing:
             st.warning(f"⚠️ **Required:** {', '.join(missing)}")
+
+# Transfer Modal Popup
+if st.session_state.show_transfer_modal:
+    # Display modal overlay
+    st.markdown("""
+    <div class="modal-overlay">
+        <div class="modal-content">
+            <div class="spinner"></div>
+            <h2>🔄 Transferring Parts</h2>
+            <p>Please wait while we process your transfer...</p>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Process transfer in background
+    if st.session_state.transfer_in_progress:
+        parts_data = [{'barcode': p['barcode'], 'quantity': p['quantity']} for p in st.session_state.parts]
+        total_items = sum(p['quantity'] for p in st.session_state.parts)
+        
+        # Add a small delay to ensure the modal shows
+        time.sleep(1)
+        
+        if save_transfer_data(from_location, to_location, parts_data):
+            # Transfer successful
+            st.session_state.show_transfer_modal = False
+            st.session_state.transfer_in_progress = False
+            
+            st.success(f"✅ **Transfer Completed!** {total_items} items transferred")
+            st.balloons()
+            
+            # Show completed transfer summary
+            st.subheader("🧾 Transfer Receipt")
+            st.write(f"**Transfer ID:** TXN-{datetime.now().strftime('%Y%m%d%H%M%S')}")
+            st.write(f"**From:** {from_location} **→ To:** {to_location}")
+            st.write(f"**Total Items:** {total_items}")
+            st.write(f"**Completed:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            
+            # Auto-reset for new transfer
+            reset_transfer()
+            st.rerun()
+        else:
+            # Transfer failed
+            st.session_state.show_transfer_modal = False
+            st.session_state.transfer_in_progress = False
+            st.rerun()
 
 # Emergency reset button
 if st.session_state.parts:
