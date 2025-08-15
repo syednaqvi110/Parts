@@ -459,37 +459,43 @@ if can_complete:
         for i, part in enumerate(st.session_state.parts, 1):
             st.write(f"{i}. **{part['barcode']}** - Qty: {part['quantity']}")
     
-    if st.button("🚀 Complete Transfer", type="primary"):
+    # Complete Transfer Button - disabled when transfer is in progress
+    transfer_clicked = st.button(
+        "🚀 Complete Transfer" if not st.session_state.transfer_in_progress else "🔄 Processing Transfer...", 
+        type="primary",
+        disabled=st.session_state.transfer_in_progress
+    )
+    
+    if transfer_clicked and not st.session_state.transfer_in_progress:
         # Set transfer in progress to prevent multiple clicks
         st.session_state.transfer_in_progress = True
-        st.rerun()
-
-elif st.session_state.transfer_in_progress:
-    # Show processing state
-    st.info("🔄 **Processing transfer...** Please wait")
-    
-    # Perform the actual transfer
-    parts_data = [{'barcode': p['barcode'], 'quantity': p['quantity']} for p in st.session_state.parts]
-    total_items = sum(p['quantity'] for p in st.session_state.parts)
-    
-    if save_transfer_data(from_location, to_location, parts_data):
-        st.success(f"✅ **Transfer Completed!** {total_items} items transferred")
-        st.balloons()
         
-        # Show completed transfer summary
-        st.subheader("🧾 Transfer Receipt")
-        st.write(f"**Transfer ID:** TXN-{datetime.now().strftime('%Y%m%d%H%M%S')}")
-        st.write(f"**From:** {from_location} **→ To:** {to_location}")
-        st.write(f"**Total Items:** {total_items}")
-        st.write(f"**Completed:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        # Perform the actual transfer immediately
+        parts_data = [{'barcode': p['barcode'], 'quantity': p['quantity']} for p in st.session_state.parts]
+        total_items = sum(p['quantity'] for p in st.session_state.parts)
         
-        # Auto-reset for new transfer
-        reset_transfer()
-        st.rerun()
-    else:
-        # Reset transfer in progress on failure
-        st.session_state.transfer_in_progress = False
-        st.rerun()
+        if save_transfer_data(from_location, to_location, parts_data):
+            st.success(f"✅ **Transfer Completed!** {total_items} items transferred")
+            st.balloons()
+            
+            # Show completed transfer summary
+            st.subheader("🧾 Transfer Receipt")
+            st.write(f"**Transfer ID:** TXN-{datetime.now().strftime('%Y%m%d%H%M%S')}")
+            st.write(f"**From:** {from_location} **→ To:** {to_location}")
+            st.write(f"**Total Items:** {total_items}")
+            st.write(f"**Completed:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            
+            # Auto-reset for new transfer
+            reset_transfer()
+            st.rerun()
+        else:
+            # Reset transfer in progress on failure
+            st.session_state.transfer_in_progress = False
+            st.rerun()
+    
+    # Show processing message when transfer is in progress
+    if st.session_state.transfer_in_progress:
+        st.info("🔄 **Processing transfer...** Please wait")
 
 else:
     # Show what's missing or if disabled
