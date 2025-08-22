@@ -10,7 +10,7 @@ import time
 
 # Configure page
 st.set_page_config(
-    page_title="Parts Transfer Scanner - v8",
+    page_title="Parts Transfer Scanner",
     page_icon="📦",
     layout="centered"
 )
