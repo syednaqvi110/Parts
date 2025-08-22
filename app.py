@@ -1,4 +1,4 @@
-# Parts Transfer Scanner - Version 8 (With Keep-Alive)
+# Parts Transfer Scanner
 # Added auto-refresh keep-alive to prevent sleeping
 
 import streamlit as st
