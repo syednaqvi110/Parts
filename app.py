@@ -122,6 +122,11 @@ def update_quantity(index, new_qty):
     if 0 <= index < len(st.session_state.parts) and new_qty > 0:
         st.session_state.parts[index]['quantity'] = new_qty
         st.session_state.parts[index]['timestamp'] = datetime.now()
+        
+        # Clear the text input's cached value to force it to update
+        qty_input_key = f"qty_input_{index}"
+        if qty_input_key in st.session_state:
+            del st.session_state[qty_input_key]
 
 def save_transfer_data(from_location, to_location, parts_data):
     """Save transfer to Google Sheets"""
